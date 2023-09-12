@@ -1,0 +1,158 @@
+---
+title: "SimDataAnalysis"
+author: "Sarah Bolinger"
+date: "2023-09-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r}
+remove(list=ls())
+library(tidyverse)
+library(car)
+# library(stats)
+# library(AICcmodavg)
+
+probSurv = 0.9
+
+```
+
+Load the data:
+
+```{r}
+# filename_read = "py_output/likelihood_values_01312023_203624.csv"
+filename_read = "py_output/08112023_103353/ml_val_08112023_103353.txt"
+# data = read.csv(filename_read)
+data = as.data.frame(read_delim(filename_read, delim=","))
+
+#df = data[data$psurv_est > 0.7]
+# data = filter(data, psurv_est > 0.7)
+```
+
+Create some new dataframes:
+
+```{r}
+# This works to create a dataframe with mean, median, sd:
+df2 = data %>%
+  group_by(num_nests, psurv_real, obs_int, storm_freq, storm_dur) %>%
+  # group_by(.data[[num_nests]], psurv_real, obs_int, storm_freq, storm_dur) %>%
+  summarise(across(c(psurv_est, pflood_est), list(mean=mean, median=median, sd=sd)))
+
+df3 = data %>%
+  group_by(num_nests, psurv_real, obs_int, storm_freq, storm_dur) %>%
+  summarise(across(c(stormsurv_est, stormflood_est), list(mean=mean, median=median, sd=sd)))
+```
+
+Calculate bias:
+
+```{r}
+
+#df2$bias    = df2$probSurv_est - probSurv   # need the directional component
+df2$bias     = df2$psurv_est_mean - probSurv 
+#df2$pctbias = abs(df2$bias/probSurv)
+df2$pctbias = abs(df2$bias/probSurv)
+```
+
+Create boxplots:
+
+```{r}
+
+grouped = data %>% group_by(num_nests, psurv_real, obs_int, storm_dur, storm_freq)
+
+# These are values you can use to hold everything else constant while you change
+# one variable
+
+nest = 200
+surv = 0.95
+dur  = 2
+freq = 4
+obsint = 3
+
+data_obsint = data %>% filter(num_nests==nest & psurv_real==surv & storm_dur==dur & 
+                                 storm_freq==freq)
+
+bplot = ggplot(data_obsint, aes(x=obs_int, y=psurv_est, group=obs_int)) +
+               geom_boxplot(notch=FALSE, color="darkblue", fill="cornflowerblue") +
+               labs(x="Observation Interval", y="Estimated DSR")   +
+               geom_abline(color="chartreuse4", size =1, slope=0, intercept=surv)
+ 
+plot(bplot)
+
+data_dur = data %>% filter(num_nests==nest & psurv_real==surv & obs_int==obsint & 
+                             storm_freq==freq)
+
+bplot2 = ggplot(data_dur, aes(x=storm_dur, y=psurv_est, group=storm_dur)) +
+  geom_boxplot(notch=FALSE, color="darkslategray", fill="cadetblue") + 
+  labs(x="Storm Duration", y="Estimated DSR")   +
+  geom_abline(color="chartreuse4", size =1, slope=0, intercept=surv)
+
+
+plot(bplot2)
+
+data_freq = data %>% filter(num_nests==nest & psurv_real==surv & obs_int==obsint & 
+                             storm_dur==dur)
+
+bplot3 = ggplot(data_freq, aes(x=storm_freq, y=psurv_est, group=storm_freq)) +
+  geom_boxplot(notch=FALSE, color="darkslategray", fill="darkolivegreen3") + 
+  labs(x="Storm Duration", y="Estimated DSR")   +
+  geom_abline(color="chartreuse4", size =1, slope=0, intercept=surv)
+
+plot(bplot3)
+```
+
+
+```{r}
+
+time_now = format(Sys.time(), "%y%m%d_%H%M")
+
+n = 1
+
+storm_model <- lm(pctbias ~ Storm_frequency + Storm_duration, data=df2)
+
+resid <- storm_model$residuals
+hist(resid)
+qqnorm(resid)
+qqline(resid)
+
+summary(storm_model)
+filename_write = sprintf("lm_summary_%s.txt", time_now)
+
+# this file keeps the formatting when you import back into R,
+# but the txt file itself is a mess:
+
+dput(summary(storm_model), file=filename_write, control="all")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

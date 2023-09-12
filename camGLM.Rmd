@@ -1,0 +1,1175 @@
+---
+title: "CameraGLM"
+output: html_document
+date: "2023-08-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, include=FALSE}
+# This script runs various GLMs using the camera fate data
+# I've included the code for the fate misclassification function for reference
+
+remove(list=ls())
+while (!is.null(dev.list()))  dev.off()
+# setwd("C:/Users/sarah/Dropbox/Coursework/dissertation/ch1_analysis/")
+
+#library(Amelia)
+#slibrary(lme4)
+#library(lmer)
+#library(psych)
+library(stats)
+library(tidyverse)
+library(car)
+#library(performance)
+library(gtsummary)
+#library(corrplot)
+library(AICcmodavg)
+library(gt)
+library(effects)
+library(ggpubr)
+```
+
+notes:
+what is the correlation between variables
+
+AIC table including first-order interactions, correlation matrix
+for best model or set of best models:
+- misclassification vs classification
+
+can do 2 separate analyses: H vs F and then take out H and look at classification of failure
+
+analysis of fates - put it in a table
+
+```{r}
+# ------------------------------------------------------------------------------
+# Read in the data 
+# ------------------------------------------------------------------------------
+
+filename <- "model_data/all_nest_data_GLM_0906_0949_.csv"
+ndGLM_   <- read_csv(filename )
+
+now = format(Sys.time(), "%m%d_%H%M_")
+
+```
+
+Reference 
+
+```{r}
+
+# 
+# howMis <- function(fate, cfate){
+#   case_when(
+#     #fate == 0                  & cfate %in% c(2,3,4,5,6)     ~ "F", 
+#     fate == 0            & cfate == 1                  ~ "M",
+#     fate %in% c(2:6)     & cfate != fate               ~ "M",
+#     fate == 7            & cfate %in% c(0:6)           ~ "N",
+#     fate %in% c(0:6)     & cfate == 7                  ~ "U"
+#   )
+# }
+# 
+```
+
+```{r}
+# nd_GLM_ %>% 
+#   filter(site %in% c("RUTW", "RUTE")) %>%
+#   filter(species %in% c("CONI", "LETE")) 
+```
+
+```{r}
+
+# -----------------------------------------------------------------------------
+# * MISSING DATA * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+# ------------------------------------------------------------------------------
+
+cat("All the missing values:\n\n")
+
+camFateNA    <- ndGLM_$nest[which(is.na(ndGLM_$cam_fate))]  # 44 total
+fate_dateNA  <- ndGLM_$nest[which(is.na(ndGLM_$fate_date))] # 50 total
+nest_ageNA   <- ndGLM_$nest[which(is.na(ndGLM_$nest_age))]  # 66 total
+
+allNA <- union(camFateNA, fate_dateNA)
+allNA <- union(allNA, nest_ageNA) # 72 total nests to exclude-that's almost half
+
+wmNA  <- ndGLM_$nest[which(is.na(ndGLM_$was_mis))] # add nests where was_mis == NA
+
+allNA <- union(allNA, wmNA)
+numNA <- length(allNA) # 78 total now - now down to 70 on 20 aug
+
+NA201920 <- ndGLM_ %>% 
+  filter(nest %in% allNA) %>%
+  filter(year != "2021") %>%
+  select(nest)                 # only 38 from 2019-2020 
+
+ndGLM_$numNA <- numNA                     # export the counts as part of the data
+ndGLM_$numNA1920 <- length(NA201920$nest) 
+
+sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
+sapply(ndGLM_, function(x) sum(is.na(x)))
+
+
+
+```
+
+
+
+
+
+```{r}
+# nest data including 2021 -------------------------------------------------------------
+
+ndGLM1 <- ndGLM_ %>% select(!status) # remove status (list of lists)
+ndGLM1 <- as.data.frame(ndGLM1)       # normal df instead of grouped_df
+ndGLM1 <- ndGLM1 %>% 
+  mutate(across(c(species, final_fate, how_mis, HF_mis, cam_fate), as.factor))
+
+
+ndGLM1 <- ndGLM1 %>%
+  mutate(k = as.numeric(k),
+         wrongFD = case_when(fate_date > k  ~ 1,
+                             fate_date == j ~ 1,
+                             fate_date < j  ~ 1,
+                             TRUE ~ 0 # kind of like else?
+                   
+         )
+         )
+cat("Check fate date for these nests: \n\n")
+ndGLM1$nest[which(ndGLM1$wrongFD==1)]
+```
+
+Remove the NAs:
+
+```{r}
+
+#T/F vector of correct length (nrows)
+ndGLM1$remove <- ndGLM1$nest %in% allNA # use %in% instead of ==
+# write.csv(ndGLM1, sprintf("output/which_removed%s.csv", now))
+
+ndGLM1 <- ndGLM1[ndGLM1$remove == FALSE,] # somehow I got 76 instead of 78
+fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis)
+
+```
+
+
+
+```{r}
+cat("DATA INCLUDING 2021\n")
+cat("\n\n\nPredictor variables:\n\n")
+table(ndGLM1$species)
+cat("\ntrue fate (according to camera footage)")
+table(ndGLM1$cam_fate)
+cat("\ndate that fate was assigned")
+table(ndGLM1$fate_date)
+cat("\nnest age when fate assigned")
+table(ndGLM1$nest_age)
+cat("\nlength of final observation interval (days)")
+table(ndGLM1$obs_int)
+
+cat("\n\n\nPossible response variables:\n\n")
+# table(ndGLM1$hatchfail)
+# table(ndGLM1$c_hatchfail)
+# table(ndGLM1$was_mis)
+cat("misclassified (hatch vs fail):  ")
+table(ndGLM1$HF_mis)
+cat("\nwas the nest misclassified in the field?")
+table(ndGLM1$misclass)
+cat("\nhow was the nest misclassified?")
+table(ndGLM1$how_mis)
+
+cat("\nhatch to fail:", sum(ndGLM1$HF==110, na.rm=T))
+# ndGLM1$HF==110
+cat("\nfail to hatch:", sum(ndGLM1$HF == 101, na.rm=T))
+
+# sapply(ndGLM1, function(x) which(is.na(x))) # or do this by nest number
+# sapply(ndGLM1, function(x) sum(is.na(x)))
+
+fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis)
+```
+
+
+Excluding 2021:
+
+```{r}
+
+# Leads to a completely different order of models for BIC and AICc
+# -----------------------------------------------------------------------------
+#ndGLM$nest_age = abs(ndGLM$nest_age)
+ndGLM2 <- ndGLM1[ndGLM1$year!="2021",] # data with 2021 removed - less than half
+# table(ndGLM2$was_mis)                  # only 10 misclassified
+cat("DATA EXCLUDING 2021\n")
+cat("\n\nNAs by variable:\n\n")
+sapply(ndGLM2, function(x) sum(is.na(x)))
+
+##nestAgeNA <- ndGLM2$nest[which(is.na(ndGLM2$nest_age))]
+#fateDateNA <- ndGLM2$nest[which(is.na(ndGLM2$fate_date))]
+# 
+# ndGLM3<- ndGLM2 %>% filter(cam_fate == !is.na(cam_fate)) %>%
+#   mutate(true_fate = cam_fate[cam_fate!=7])
+
+cat("\n\n\nPredictor variables:\n")
+table(ndGLM2$species)
+cat("\ntrue fate (according to camera footage)")
+table(ndGLM2$cam_fate)
+
+# ndGLM2 <- ndGLM2 %>% 
+#   mutate(across(c(species, k, final_fate, how_mis, misclass), as.factor))
+# categorical vars are recoded as dummy vars 
+# to summarize the categorical predictors, use a frequency table:
+# dates (and age?) are interval-scaled data? or just continuous?
+cat("\ndate that fate was assigned")
+table(ndGLM2$fate_date)
+# fate date appears fairly evenly distributed
+cat("\nnest age when fate assigned")
+table(ndGLM2$nest_age) # nest age is highly skewed to hatch age
+# and hatch age should be 1:1 correlated w/ species
+# if I happen to have more observations at those 2 ages, that biases things, right?
+
+cat("\nlength of final observation interval (days)")
+table(ndGLM2$obs_int)
+
+cat("\n\n\nPossible response variables:\n\n")
+# cat("misclassified, hatch vs fail",table(ndGLM2$HF_mis)) # H/F misclassification
+cat("misclassified (hatch vs fail):  ")
+table(ndGLM2$HF_mis) # H/F misclassification
+cat("\nwas the nest misclassified in the field?")
+table(ndGLM2$misclass) # any misclassification
+cat("\nhow was the nest misclassified?")
+table(ndGLM2$how_mis)
+# table(ndGLM2$hatchfail)
+# table(ndGLM2$c_hatchfail)
+cat("\nhatch to fail:", sum(ndGLM2$HF==110, na.rm=T))
+# ndGLM1$HF==110
+cat("\nfail to hatch:", sum(ndGLM2$HF == 101, na.rm=T))
+
+```
+
+------------------------------------------------------------------------------------
+* * PLOTS * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+------------------------------------------------------------------------------------
+
+
+Check for correlation amongst predictors:
+
+```{r}
+# SCATTERPLOTS ----------------------------------------------------------------
+
+# how does species correlate with continuous vars?
+# 
+
+dat <- ndGLM1
+dat2 <- ndGLM2
+
+
+# label <- function(y) max(dat$y) * 0.8
+# label <- function(y) max(dat[,y]) * 0.8
+label_ <- function(y) max(dat[[y]]) * 0.8
+```
+
+Including vs excluding 2021:
+
+```{r}
+
+ggplot(dat, aes(x=fate_date, y=obs_int)) +
+  geom_point() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  # stat_regline_equation(formula=y~x,
+  #                       aes(..eq.label..),
+  #                       label.y=0.8*max(dat$obs_int)) + # label.y = vertical position
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(label.y=0.8*max(dat$obs_int),aes(label=..eq.label..)) # label.y = vertical position
+  # stat_regline_equation(label.y=label_(obs_int),aes(label=..eq.label..), aes=T) # label.y = vertical position
+  # stat_regline_equation(aes(label=..eq.label..),position=position_jitter(height=2))
+  # stat_regline_equation(aes(label=..eq.label..),position=position_dodge())
+  
+  # stat_regline_equation(label.y=Inf, label.x=-Inf, aes(label=..rr.label..)) +
+  # stat_regline_equation(label.y=Inf, label.x=Inf, aes(label=..eq.label..))
+  
+  # stat_regline_equation(formula = y~x,
+                        # label.y=0.8*max(y),aes(label=..eq.label..)) # label.y = vertical position
+
+# ggplot(dat, aes(x=nest_age, y=fate_date, color=species)) +
+
+ggplot(dat2, aes(x=fate_date, y=obs_int)) +
+  geom_point() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(aes(label=..rr.label..)) +
+```
+
+
+```{r}
+
+ggplot(dat, aes(x=nest_age, y=fate_date)) +
+  # geom_point() +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$fate_date), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(aes(label=..rr.label..)) + 
+  # stat_regline_equation(label.y=6,aes(label=..eq.label..)) # label.y = vertical position
+
+ggplot(dat2, aes(x=nest_age, y=fate_date)) +
+  # geom_point() +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$fate_date), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(aes(label=..rr.label..)) + 
+  # stat_regline_equation(label.y=6,aes(label=..eq.label..)) # label.y = vertical position
+```
+
+When is it OK to use jitter instead of point?
+
+```{r}
+ggplot(dat, aes(x=nest_age, y=obs_int)) +
+  # geom_point() +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(aes(label=..rr.label..)) + 
+  # stat_regline_equation(label.y=14,aes(label=..eq.label..)) # label.y = vertical position
+
+ggplot(dat2, aes(x=nest_age, y=obs_int)) +
+  # geom_point() +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~")))
+  # stat_regline_equation(aes(label=..rr.label..)) + 
+  # stat_regline_equation(label.y=14,aes(label=..eq.label..)) # label.y = vertical position
+```
+
+
+
+Histograms ----------------------------------------------------------------------------
+
+Plot the distributions of each continuous predictor 
+
+First, create a function. This way we can change the response variable or data used in the plot without having to copy-paste all the code and change the variables inside it.
+
+
+```{r}
+
+# dat = ndGLM1 # with 2021
+# dat2 = ndGLM2 # without 2021
+
+# set_fill <- function(v1, v2, data) {
+#   data <- data %>% mutate(fill = !(.data[[v1]]==1),
+#                           fill2 = (.data[[v2]]==1))
+# } 
+# 
+# dat <- set_fill("HF_mis", "misclass", dat)
+# dat2 <- set_fill("HF_mis", "misclass", dat2)
+# plot_var <- function(v1, v2, dat){
+# plot_var <- function(resp, dat){
+plot_var <- function(resp, dat, label1, label2){
+  
+  dat <- dat %>% mutate(fill = !(.data[[resp]]==1))
+  # , fill2 = (.dat[[v2]]==1))
+  
+  p1 <- ggplot(dat, aes(x=nest_age)) +  # age of nest when fate assigned
+    geom_histogram(aes(fill=fill )) + # grouped by (mis)classification
+    
+    # can add lines at incubation times, not sure if necessary tho
+    #geom_vline(xintercept=16, linetype="dashed", size=1, color="darkmagenta") +
+    #geom_vline(xintercept=19, linetype="dashed", size=1, color="darkgoldenrod3") +
+    
+    xlab("nest age (days)") +
+    ylab("count") +
+    # scale_fill_discrete(name="",labels=c("Misclassified", "Correctly classified")) +
+    scale_fill_discrete(name="",labels=c(label1, label2)) +
+    theme(axis.text = element_text(size=12),
+          axis.title = element_text(size=16),
+          legend.text = element_text(size=14)
+    )
+  
+  p2 <- ggplot(dat, aes(x=fate_date)) +  # day of season when fate assigned
+    geom_histogram(aes(fill=fill)) + # grouped by (mis)classification
+    xlab("day of season") +
+    theme(axis.text = element_text(size=12), 
+          axis.title = element_text(size=16),
+          axis.title.y = element_blank()
+    )# grouped by (mis)classification
+  
+  p3 <- ggplot(dat, aes(x=obs_int)) +  # day of season when fate assigned
+    geom_histogram(aes(fill=fill)) + # grouped by (mis)classification
+    xlab("final interval length (days)") +
+    scale_x_continuous(breaks=c(0,3,6,9,12)) +
+    theme(axis.text   = element_text(size=12),
+          axis.title  = element_text(size=16),
+          axis.title.y = element_blank()
+    )# grouped by (mis)classification
+  # make sure the obs_int recorded is correct
+  
+  # plot all side-by-side
+  p4 <- ggpubr::ggarrange(p1,p2,p3,ncol=3,common.legend = TRUE)
+  p4
+}
+```
+
+First analysis: hatch/fail misclassification
+
+```{r}
+plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
+```
+
+And without 2021:
+
+```{r}
+
+plot_var("HF_mis", ndGLM2, "Misclassified", "Correctly classified")
+```
+
+Second analysis: if failed, correct or not 
+
+```{r}
+ndGLM_f <- ndGLM1[ndGLM1$c_hatchfail != 1,]
+# plot_var( "how_mis", ndGLM1[ndGLM1$c_hatchfail != 1,])
+plot_var( "HF_mis", ndGLM1[ndGLM1$c_hatchfail != 1,], "Missclassified", "Correctly classified")
+```
+
+Third analysis: assigned vs unknown 
+
+```{r}
+isU <- function(fate) ifelse(fate %in% c(7,8), 1, 0)
+
+ndGLM1 <- ndGLM1 |> mutate(is_u = isU(final_fate))
+ndGLM2 <- ndGLM2 |> mutate(is_u = isU(final_fate))
+
+
+# isU(ndGLM1)
+```
+
+
+```{r}
+plot_var("is_u", ndGLM1, "Unknown", "Assigned")
+```
+
+```{r}
+plot_var("is_u", ndGLM2, "Unknown", "Assigned")
+```
+
+Fourth analysis: if assigned, correct or not
+
+```{r}
+
+```
+
+
+------------------------------------------------------------------------------------
+* * MODELS * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+------------------------------------------------------------------------------------
+
+```{r}
+
+# look at the SE and everything in the context of the odds ratios
+
+# logistic regression looks at changes in the probability y=1 for different
+# values of x; error terms, like response, have a binomial (nonnormal) distribution
+
+# the logit link function transforms the binomially-distributed data to resemble
+# a linear model; [-inf < y < inf] even though [0 < prob < 1]
+
+# in some models, check for collinearity
+# sometimes perfect/quasi-perfect separation will lead to errors
+# (see previous versions)
+
+# simple logistic regression:
+# beta_0 is the value of the regression equation when x = 0
+# if beta_1 == 0, there is no relationship btw predictor and response
+# use Wald tests (for larger n) or likelihood ratio test
+# also compare deviances of the 2 models (full and null)
+
+# in multiple logistic regression: - 
+
+# odds ratio = prob(success) / prob(failure) = p/(1-p)
+# taking the log odds ratio allows linear model with predictor(s)
+
+# make sure cam_fate is coded as a factor even though the values are numeric
+# you can add VIF or other overdispersion param to the AIC/BIC table (arg c.hat)
+
+# when I use the same data for all models (with all NA rows removed), I get
+# a different order of models, and my first disagreement between BIC and AIC
+
+# odds ratio of x = change in the probability of y for a 1-unit change in x
+# for scaled predictors, use 1-stdev change instead of 1-unit change
+
+
+# there's also an oddsratio package
+
+# make sure categorical vars (like cam fate) are coded as factors, and continuous
+# vars are coded as numeric
+
+# convert logits to probabilities: exp(logit)/(1+exp(logit)) # for factors only
+# this can help in visualizing results of logistic regression
+
+#dataMod <- ndGLM.1
+```
+
+Do we have different rates of successful classification for hatched vs failed nests? 
+
+Center the predictor variables:
+
+```{r}
+# center predictors (don't scale) -------------------------------------------------
+
+predictors <- c("nest_age", "fate_date", "obs_int") # numeric predictors
+ndGLM_scl1 <- ndGLM1 %>% 
+  mutate(across(predictors, function(x) as.numeric(scale(x,scale=F)))) 
+# make sure df is not a grouped_df or rowwise_df, or this won't work
+
+ndGLM_scl2 <- ndGLM2 %>%
+  mutate(across(predictors, function(x) as.numeric(scale(x,scale=F))))
+```
+
+Choose which dataset you will use and create a list to store models:
+
+```{r}
+# dataMod <- ndGLM_scl2        # choose the data set for the models
+# respones <- "misclass"
+```
+
+First, create functin that makes a series of univariate models from each predictor variable, and then prints their summaries:
+
+```{r}
+# univar_mod <- function(resp, dataMod, x){
+univar_mod <- function(resp, dataMod ){
+  
+  vars <- c("species", "nest_age", "cam_fate", "fate_date", "obs_int")
+  # u_name <- paste0("umod_", x)
+  # assign(paste0("umod_", x), list())
+  # assign(u_name, list())
+  # cat(paste0("umod_", x)[[1]])
+  # cat((paste0("umod_", x))[[1]],"\n")
+  # cat(u_name[[1]],"\n")
+  # for(v in 1:length(vars)){
+  umod_ <- list()
+  for(v in seq_along(vars)){
+    # cat(v,", ",vars[v],"\n")
+    # paste0("umod_", x)[[v]] <- glm(resp ~ .data[[v]], data=dataMod, family=binomial)
+    # paste0("umod_", x)[[v]] <- glm(as.formula(resp ~ vars[v]), data=dataMod, family=binomial) # won't work
+    # f <- paste0("resp ~ ", vars[v])
+    f <- paste0(resp," ~ ", vars[v])
+    cat(f,"\n\n")
+    # paste0("umod_", x)[[v]] <- glm(as.formula(f), data=dataMod, family=binomial)
+    # paste0("umod_", x)[[v]] <- glm(f, data=dataMod, family=binomial)
+    # browser()
+    # eval(u_name)[[v]] <- glm(f, data=dataMod, family=binomial)
+    umod_[[v]] <- glm(f, data=dataMod, family=binomial)
+  }
+  # # x=2
+  # umod_ <- list()
+  
+  # 
+  # umod_[[1]] <- glm(HF_mis ~ species, data=dataMod, family=binomial)
+  # 
+  # umod_[[2]] <- glm(resp ~ nest_age, data=dataMod, family=binomial)
+  # 
+  # umod_[[3]] <- glm(resp ~ cam_fate, data=dataMod, family=binomial)
+  # 
+  # umod_[[4]] <- glm(resp ~ fate_date, data=dataMod, family=binomial)
+  # 
+  # umod_[[5]] <- glm(resp ~ obs_int, data=dataMod, family=binomial)
+  
+  
+  # assign(paste0("umod_", x), umod_
+  modsum_ <- list()
+  
+  # assign(paste0("umSum_", x), list())
+  
+  for(i in 1:5){
+    # paste0("umSum_", x)[[i]] <- summary(paste0("umod_", x)[[i]])
+    modsum_[[i]] <- summary(umod_[[i]])
+  }
+  
+  return(modsum_)
+  
+}
+```
+
+And a function that compares 2 different models:
+
+```{r}
+# mod_diff <- function(mod1, mod2, difVList){
+mod_diff <- function(mod1, mod2){
+  
+  difVList <- which(!(names(coef(mod1))) %in% names(coef(mod2)))
+  # browser()
+  # summary(mod1)
+  # cat(summary(mod1))
+  # summary(mod2)
+  # cat("\n\n")
+  # anova(mod1, mod2, test="LRT")
+  
+  cat("\npercent difference in model coefficients (vs full model):\n")
+  # cat(names(coef(mod1))[difVList])
+  cat(names(coef(mod1))[-difVList], "\n")
+  cat((abs(coef(mod2)-coef(mod1)[-difVList]) / coef(mod1)[-difVList]))
+  
+}
+# mod1 <- modsV[[1]]
+# mod2 <- mods[[2]]
+# mod3 <- mods[[3]]
+# coefNames <- names(coef(mod1))
+# # difVList <- which(!(names(coef(mod2))) %in% names(coef(mod1)))
+# difVList <- which( !( names(coef(mod3)) %in% names(coef(mod1)) ) )
+# difVList <- which( ( names(coef(mod3)) %in% names(coef(mod1)) ) )
+# difVList <- which( !( names(coef(mod1)) %in% names(coef(mod3)) ) )
+# coef(mod1)
+# difVList <- which(!(names(coef(mod2))) %in% coefNames)
+# difVList <- 
+
+```
+
+
+```{r}
+# univar_mod("HF_mis", ndGLM1, 1)
+# HF_2021 <- univar_mod("HF_mis", ndGLM1)
+HF_2021 <- univar_mod("HF_mis", ndGLM_scl1)
+# HF_2021
+# HF_no2021 <- univar_mod("HF_mis", ndGLM2)
+HF_no2021 <- univar_mod("HF_mis", ndGLM_scl2)
+# HF_no2021
+# examine model summaries 
+#  - all except species have p<0.25; cam_fate more difficult to interpret
+```
+
+```{r}
+# 
+# Coefficient names: 
+
+#   (Intercept)   speciesLETE      nest_age     cam_fate1     cam_fate2 
+
+#     cam_fate3     cam_fate4     cam_fate6     fate_date       obs_int 
+
+mods <- list()        # list to store candidate models
+
+# resp <- 
+
+# - null and full model --------------------------------------------------------
+
+mods[[1]] <- glm(misclass ~ species + nest_age + cam_fate + fate_date + obs_int,
+                 data=dataMod, family=binomial) # no error? but huge SE
+coef(mods[[1]])
+coefNames <- names(coef(mods[[1]]))
+
+mods[[2]] <- glm(misclass ~ 1, data=dataMod, family=binomial) 
+coef(mods[[2]])
+
+# mods[[1]][which(setdiff(names(coef(mods[[1]])), names(coef(mods[[2]]))))]
+# mods[[1]][setdiff(names(coef(mods[[1]])), names(coef(mods[[2]])))]
+mods[[1]][setdiff(names(coef(mods[[1]])), names(coef(mods[[2]])))]
+
+# setdiff(coef(mods[[1]]), coef(mods[[2]]))
+mod_diff(mods[[1]], mods[[2]] )
+summary(mods[[1]]) # uh oh, now nothing looks significant
+# coef(mods[[1]])
+anova(mods[[1]], mods[[2]], test = "LRT")
+
+# but the full model is significantly different from the null model
+```
+
+
+```{r}
+# effects plots - do these work for this model?
+
+# plot(allEffects(mods[[1]]))
+```
+
+
+```{r}
+# - others ---------------------------------------------------------------------
+
+# how to choose which ones to evaluate?
+
+mods[[3]] <- glm(misclass ~ nest_age + fate_date, data=dataMod, family=binomial)
+mod_diff(mods[[1]], mods[[3]])
+summary(mods[[3]])
+# excluding all non-signif vars from full model caused >20% change in age coef
+cat("\n\n")
+anova(mods[[1]], mods[[3]], test="LRT") # significant difference using LRT
+
+```
+
+
+```{r}
+# remove the vars one by one
+mods[[4]] <- glm(misclass ~ species + nest_age  + fate_date + obs_int,
+                 data=dataMod, family=binomial) # take out cam fate
+
+summary(mods[[4]])
+
+cat("\npercent difference in model coefficients (vs full model):\n")
+(abs(coef(mods[[4]])-coef(mods[[1]])[-c(4:8)]) / coef(mods[[1]])[-c(4:8)])
+# need to make vectors the same length; remove non-shared columns
+
+# changes multiple coefs by >20%
+# huge change in fate_date coef might be bc it was tiny to begin with
+
+cat("\n\n")
+anova(mods[[1]], mods[[4]], test="LRT") # close to significant change
+```
+
+
+```{r}
+# 
+mods[[5]] <- glm(misclass ~  nest_age + fate_date + obs_int,
+                 data=dataMod, family=binomial) # remove species and cam_fate
+# leaves only numeric predictors
+summary(mods[[5]])
+# is it % difference from previous model or from full model?
+# examine % difference in coefficients from removing species and cam_fate
+
+cat("\npercent difference in model coefficients (vs full model):\n")
+(abs(coef(mods[[5]])-coef(mods[[1]])[-c(2, 4:8)]) / coef(mods[[1]])[-c(2, 4:8)])
+# changes age coef by > 20%
+
+cat("\n\n")
+anova(mods[[1]], mods[[5]], test="LRT") # almost significant difference
+```
+
+
+```{r}
+# - interactions? --------------------------------------------------------------
+
+# need to have biological justification
+
+# DON'T interpret the main effects by themselves when there's evidence of
+# an interaction!
+# looking at effects of interactions should only be done in context of main effects
+
+# does the date change the effect of age at classification (age at hatch/fail)?
+# i.e. is the effect of nest age on misclassification dependent on the date of 
+# classification?
+
+# add interaction terms one by one and evaluate
+# 
+# Use boxplots to look for interactions with categorical variables
+# x2 must be a factor; also, some have too many levels
+# 
+# y = "was_mis"
+# x1 = "obs_int"
+# x2 = "species" # 
+#  # ggplot(dataMod, aes(x=.data[[y]], y=.data[[x1]])) +                                                                                                                                                                                                                                                                                                                        #   geom_boxplot(aes(color=.data[[x2]])) # # cam_fate has too many categories for this to work with it, but works for species
+```
+
+
+```{r}
+# actually, want y-axis to be the probability
+# can choose log-odds scale (linear) or probability scale (sigmoid)
+
+mods[[6]] <- glm(misclass ~ nest_age * fate_date, data=dataMod, family=binomial)
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[6]])-coef(mods[[1]])[-c(2, 4:8)]) / coef(mods[[1]])[-c(2, 4:8)])
+# how do I change this to make it work for the interaction models?
+cat("\n\n")
+anova(mods[[1]], mods[[6]], test="LRT")
+```
+
+
+```{r}
+mods[[7]] <- glm(misclass ~ cam_fate + obs_int + nest_age * fate_date,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[7]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[7]], test="LRT") 
+
+```
+
+
+
+```{r}
+
+mods[[8]] <- glm(misclass ~ species + cam_fate + obs_int + nest_age * fate_date,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[7]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[8]], test="LRT") 
+```
+```{r}
+
+mods[[9]] <- glm(misclass ~ species + obs_int + nest_age + fate_date * cam_fate ,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[9]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[9]], test="LRT") 
+```
+
+```{r}
+
+mods[[10]] <- glm(misclass ~ species * obs_int + nest_age + fate_date + cam_fate ,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[10]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[10]], test="LRT") 
+```
+```{r}
+
+mods[[11]] <- glm(misclass ~ species * nest_age + obs_int + fate_date + cam_fate ,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[11]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[11]], test="LRT") 
+```
+```{r}
+
+mods[[12]] <- glm(misclass ~ species  * cam_fate + obs_int + nest_age + fate_date,
+                 data=dataMod,
+                 family=binomial) # got the fitted probabilities error again
+
+cat("\npercent difference in model coefficients (vs full model)\n")
+(abs(coef(mods[[12]])-coef(mods[[1]])[-c(2)]) / coef(mods[[1]])[-c(2)])
+cat("\n\n")
+anova(mods[[1]], mods[[12]], test="LRT") 
+```
+
+
+```{r}
+
+# Odds ratios for all models
+cat("Odds ratios for all models:\n\n")
+oddrats <- paste(sapply(mods, function(x) exp(x$coefficients)), sep=' ')
+oddrats
+
+```
+
+```{r}
+
+# Probability -----------------------------------------------------------------
+
+
+# plogis(predict(fitted_model)) should convert the log-odds output of the model
+# to a probability; use predict(fitted_model, type="response") to see prob
+# of your data values.. can also calculate probs by hand if you want
+
+dataMod$probfull <- plogis(predict(mods[[1]]))
+dataMod$prob5 <- plogis(predict(mods[[5]]))  
+
+y = "probfull"
+x1 = "nest_age"
+x2 = "species"
+
+ggplot(dataMod, aes(x=.data[[x1]], y=.data[[y]])) +
+  geom_point(aes(color=.data[[x2]])) + 
+  geom_abline()
+#geom_boxplot(aes(color=.data[[x2]]))
+
+```
+
+```{r}
+
+# Analysis of Deviance --------------------------------------------------------
+
+# # from R docs for anova.manyglm (mvabund package):
+
+# "If you do not have a specific hypothesis of primary interest that you want to 
+# test, and are instead interested in which model terms are statistically 
+# significant, then the summary.manyglm function is more appropriate"
+
+# "WARNING:
+# The comparison between two or more models by anova.manyglm will only be valid 
+# if they are fitted to the same dataset. This may be a problem if there are 
+# missing values and R's default of na.action = na.omit is used"
+
+# so, remove NAs first so you have a consistent dataset throughout
+
+```
+
+
+```{r}
+
+# AIC and BIC -----------------------------------------------------------------
+
+dp <- function(x) deparse(x, width.cutoff=150)
+
+modEQ <- paste(
+  sapply(mods, 
+         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sfamily)")
+  ), sep = " ")
+
+nestBIC <- bictab(cand.set = mods, modnames = modEQ, sort = T) # include VIF?
+nestBIC
+
+# AIC and BIC are disagreeing more and more as I add back nests.
+# or maybe it's the centered variables
+
+BICtab <- gt(nestBIC) |> 
+  tab_header(title="BIC scores") |>
+  tab_style(style = 
+              cell_text(size="small"),
+            locations = cells_body())
+
+BICtab  # view table
+
+nestAIC <- aictab(cand.set = mods, modnames = modEQ, sort = T)
+nestAIC
+
+AICtab <- gt(nestAIC) |> 
+  tab_header(title="AIC scores") |>
+  tab_style(style = 
+              cell_text(size="small"),
+            locations= cells_body())
+AICtab
+
+
+#ab <- bind_rows(AICtab,BICtab) # doesn't work
+ab3 <- bind_rows(nestAIC, nestBIC) # not quite what I need 
+# need to group by modname
+
+ab3 <- ab3 %>%
+  replace(is.na(.), 0) %>%
+  group_by(Modnames) %>%
+  summarize(across(where(is.numeric), c(sum, mean)))
+
+deltaTab <- ab3 %>%
+  select(c(Modnames, K_1, Delta_AICc_1, Delta_BIC_1, LL_2,)) %>%
+  arrange(Delta_AICc_1)
+
+abTab <- ab3 %>%
+  select(c(Modnames, K_1, AICc_1, AICcWt_1, BIC_1, BICWt_1, LL_2))
+
+deltaTab1 <- gt(deltaTab) |>
+  tab_header(title="Summary of Information Criteria") |>
+  tab_style(style=cell_text(size="small"),
+            locations=cells_body())
+
+abTab1 <- gt(abTab) |>
+  tab_header(title="Summary of Information Criteria") |>
+  tab_style(style=cell_text(size="sma
+                            ll"),
+            locations=cells_body())
+# use gtsave() or as_word() to export - actually, just use gtsave() w/ file type
+#as_word(BICtab) # output I don't know how to use
+
+deltaTab1
+
+now = format(Sys.time(), "%m%d_%H%M")
+
+tab <- deltaTab1 # which table to save to file
+
+file_name <- paste0(names(tab)[1], "aicbic_", now, ".rtf")
+gtsave(tab, file_name, path="analysis/")
+# at least AIC and BIC vals seem to agree (mostly)
+
+```
+
+
+
+
+```{r}
+
+# Nice-looking tables ----------------------------------------------------------
+
+tbl_regression(mods[[1]], exponentiate=TRUE) # best model w/o same data
+
+tbl_regression(mods[[3]], exponentiate = TRUE) # best model w/ same data
+
+tbl_regression(mods[[5]], exponentiate=TRUE) # full model
+
+# all of the categorical vars look insane...
+
+tab <- mods[[1]] %>%
+  tbl_regression(exponentiate=TRUE) %>%
+  add_global_p() %>%
+  bold_p()
+
+# keep getting 50 or more warnings for model 1 - 
+# "glm.fit: fitted probabilities numerically 0 or 1 occurred"
+# ugh, not this again
+# didn't do anything when I first ran the model...
+
+# why is it only the categorical vars that create the craziness?
+# or is it just species? try the one w/o species
+
+tab2 <- mods[[12]] %>%
+  tbl_regression(exponentiate=TRUE) %>%
+  add_global_p() %>%
+  bold_p()
+# nope, still getting 50+ warnings - same ones
+
+tab2
+
+tab3 <- mods[[5]] %>%
+  tbl_regression(exponentiate=TRUE) %>%
+  add_global_p() %>%
+  bold_p()
+
+tab3
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+How far off were we on hatch success/failure rate?  
+
+remove 2021? or add year effect and see if it's different?
+very few cameras from months other than June - afraid of bias
+also very few nest ages and relatively many U fates bc of poor monitoring
+long nest check intervals
+pretty sure this makes them MNAR bc hatched nests are more likely to have age
+remove Holly Beach??
+
+
+
+
+<!-- # Create new list of models in order ------------------------------------------- -->
+
+<!-- # logistic regression looks at changes in the probability y=1 for different -->
+<!-- # values of x; error terms, like response, have a binomial (nonnormal) distribution -->
+
+<!-- # the logit link function transforms the binomially-distributed data to resemble -->
+<!-- # a linear model; [-inf < y < inf] even though [0 < prob < 1] -->
+
+<!-- # in some models, check for collinearity -->
+<!-- # sometimes perfect/quasi-perfect separation will lead to errors -->
+<!-- # (see previous versions) -->
+
+<!-- # simple logistic regression: -->
+<!-- # beta_0 is the value of the regression equation when x = 0 -->
+<!-- # if beta_1 == 0, there is no relationship btw predictor and response -->
+<!-- # use Wald tests (for larger n) or likelihood ratio test -->
+<!-- # also compare deviances of the 2 models (full and null) -->
+
+<!-- # in multiple logistic regression: -  -->
+
+<!-- # odds ratio = prob(success) / prob(failure) = p/(1-p) -->
+<!-- # taking the log odds ratio allows linear model with predictor(s) -->
+
+<!-- # make sure cam_fate is coded as a factor even though the values are numeric -->
+<!-- # you can add VIF or other overdispersion param to the AIC/BIC table (arg c.hat) -->
+
+<!-- # when I use the same data for all models (with all NA rows removed), I get -->
+<!-- # a different order of models, and my first disagreement between BIC and AIC -->
+
+<!-- # odds ratio of x = change in the probability of y for a 1-unit change in x -->
+<!-- # for scaled predictors, use 1-stdev change instead of 1-unit change -->
+
+
+<!-- # there's also an oddsratio package -->
+
+<!-- # make sure categorical vars (like cam fate) are coded as factors, and continuous -->
+<!-- # vars are coded as numeric -->
+
+<!-- # convert logits to probabilities: exp(logit)/(1+exp(logit)) # for factors only -->
+<!-- # this can help in visualizing results of logistic regression -->
+
+<!-- #dataMod <- ndGLM.1 -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

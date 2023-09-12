@@ -1,0 +1,1654 @@
+---
+title: "clean_format"
+output: html_document
+date: "2023-08-25"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+R code for cleaning and formatting nest monitoring data for use in: 
+
+1.  Darrah (2018) Bayesian nest exposure model
+
+2.  Program MARK
+
+3.  Nest fate misclassification GLM
+
+[Now converting this script to R Markdown!]
+
+This script walks the user through cleaning the observation data, with
+steps along the way to view the data and make sure that a) the R code is
+behaving the way we expect and b) everything was entered accurately into
+the spreadsheet.
+
+Formatting:
+
+-   Audubon data has observation dates as columns and nests as rows
+
+-   Need to convert to one row per observation to run the models
+
+Some of the formatting is tedious because I have a lot of checks to make
+sure we are removing/editing the right things.
+
+First, load packages and create a function that will be used to convert
+dates to "season-days", or days since the beginning of the season (which
+can be adjusted).
+
+```{r echo=FALSE}
+remove(list=ls())
+setwd("C:/Users/sarah/Documents/nest_models")
+
+library(stats)
+library(tidyverse)
+library(car)
+
+# give all files created from this document a shared suffix that is unique to 
+# the specific run
+now = format(Sys.time(), "%m%d_%H%M_")
+
+sday <- function(date){ # converts dates to season-days starting at a given date
+
+  date <- as.Date(
+    lubridate::parse_date_time(date, c("%d-%b", "%m/%d/%Y"), exact = TRUE))
+  
+  # yday(date) - 103 # actual Julian date minus no. days from 1 Jan - 13 Apr
+  yday(date) - 100 # actual Julian date minus no. days from 1 Jan - 10 Apr
+  #yday(date) - 90 # actual Julian date minus no. days from 1 Jan - 1 Apr
+  #yday(date) - 110 # actual Julian date minus no. days from 1 Jan - 20 Apr
+} 
+```
+
+------------------------------------------------------------------------
+
+## Loading and cleaning the data -------------------------------------------
+
+Load the data from one or more years and concatenate into a single
+dataframe.
+
+I added year as an additional column to sort by/use as a covariate.
+
+One could simply sort by year to account for the fact that there are
+nests with the same ID number in multiple years, but I added a prefix to
+nest ID for each year to differentiate them (from earliest to latest
+year: "10", "20", and "30", with extra zero-padding to make all nest
+numbers the same length)
+
+```{r}
+# #filename <- 'nestdata2017_SMD.csv'
+filename21 <- '2021_nests_3.csv'
+filename20 <- '2020_nests_3.csv'
+filename19 <- '2019_nests_3.csv'
+
+# there is a more elegant way to do this with dplyr, but oh well
+# make all vars character so that bind_rows() will work
+data19 <- read_csv(filename19, skip = 1, skip_empty_rows = TRUE,
+                   col_types = cols(.default="c"))
+data19$year <- 2019
+data19$nest <- data19$nest %>% str_pad(width=4, side="left", pad="0" )
+data19$nest <- paste0("1", data19$nest)
+
+data20 <- read_csv(filename20, skip = 1, skip_empty_rows = TRUE,
+                   col_types = cols(.default="c"))
+data20$year <- 2020
+data20$nest <- data20$nest %>% str_pad(width=4, side="left", pad="0" )
+data20$nest <- paste0("2", data20$nest)
+
+data21 <- read_csv(filename21, skip = 1, skip_empty_rows = TRUE,
+                   col_types = cols(.default="c"))
+data21$year <- 2021
+data21$nest <- data21$nest %>% str_pad(width=4, side="left", pad="0" )
+data21$nest <- paste0("3", data21$nest)
+
+# concatenate the dataframes. introducing NAs in non-shared date columns is
+# fine as they will be removed later with pivot_longer
+allData <- bind_rows(data21, data20, data19)
+```
+```{r}
+notes <- data.frame(allData$nest, allData$NOTES )
+write.csv(notes, sprintf("output/field_notes_%s.csv", now))
+```
+
+### Format the columns
+
+First, we will work in steps to remove extraneous columns or empty
+columns accidentally introduced during import. Empty rows will be dealt
+with later.
+
+Check the column names to see which ones you want to remove:
+
+```{r}
+names(allData)                       # check column names
+```
+
+Enter the names of the columns you know you want to remove into the
+vector "rmNames" below. You do not have to enter the names of any blank
+columns added during import - there is a separate command below that
+targets those - just the names of the user-generated columns in Excel.
+
+I also went ahead and moved the year column from the very end of the
+dataframe to a spot just before the observations, so it is with the rest
+of the nest info.
+
+You could make the code chunk below into two chunks to check the names
+in between. Or you could add the first removal line to the dplyr
+expression (with appropriate formatting) to simplify the code.
+
+I renamed the columns in Excel to remove spaces, but you can use column
+name repair to do this in R.
+
+```{r}
+
+rmNames <- c("pic", "ad_band", "ch_band", "pred_type", "NOTES", "found", "cam_diff", "cam_notes") # names of columns to be removed (in quotes!)
+
+
+cols <- match(rmNames, names(allData)) # store the indices of chosen columns
+nestdata <- allData[,-cols]            # remove extraneous columns
+  
+nestdata <- nestdata %>%
+  relocate(year, .after=fate_date) %>%        # move year column
+  select_if(~!(all(is.na(.) | all(. == "")))) # remove any empty columns
+
+names(nestdata)                               # check column names again!
+```
+
+Are there any extra columns left over that don't have observations?
+
+I needed to remove the last six columns, so I simply put their indices
+into the code below to be extra sure I was getting the correct columns:
+
+```{r}
+cols <- c(125:130)        # indices of columns for removal
+names(nestdata[cols])
+```
+
+If it looks correct, remove the columns. Then check the names to see
+what columns are left.
+
+```{r}
+nestdata <- nestdata[,-cols] 
+names(nestdata)   # are you tired of looking at column names yet??
+```
+
+Don't worry, there's more fiddly data cleaning to come, but the
+fiddliest parts are behind us.
+
+Column names in the Excel file are dates, representing days that nest
+surveys occurred. The code below uses regular expressions (regex) to
+extract the date strings for each column name. This gives us a list of
+observation dates, and assigning the indices for these columns to
+colIndex allows us to easily target just the observation columns by
+using data[,colIndex]
+
+As is, the code extracts day-month; the commented code also extracts
+year.
+
+```{r}
+colNames <- names(nestdata)
+colIndex <- which( str_detect(colNames, '[0-9]{1,2}-[:LETTER:]{3}') ) # no year
+#colIndex <- which( str_detect(colNames, '[0-9]{1,2}-[:LETTER:]{3}-[0-9]{2}') )
+```
+
+### Check and extract observation strings
+
+Next, we will convert the names of the observation columns (in day-month
+day-month-year format) to season-days using the "sdays" function, and
+then add a character (I picked "j" for Julian even though they aren't
+true Julian dates) so that the column names are easier for R to
+interpret (numeric column names can cause issues).
+
+```{r}
+dates     <- names(nestdata[colIndex]) # select names of observation columns
+julDates  <- sday(dates)                # convert the names to season-days
+names(julDates)  <- dates               # also creates index of date:season-day
+
+# create a vector of all column names by combining the nest info columns (cols minus colIndex cols) and the observation columns (with the "j_" pasted in front)
+newNames         <- c(names(nestdata[-colIndex]),paste0("j_", julDates))
+names(nestdata) <- newNames            # apply the new column names!
+
+write.csv(nestdata, sprintf("output/nestdata_cols_%s.csv", now), row.names = F)
+```
+
+Observations entered into the Excel sheet are not always formatted
+uniformly, although generally they start with number of eggs or chicks
+observed. They are generally strings.
+
+To extract the relevant parts of the observations and cut out the rest,
+we will use the stringr function str_extract. Use this code to view all
+unique nest observation strings in the data, so you can add all relevant
+observations to the string list later in the code.
+
+To check that we extracted all observations, we can count the number of
+unique strings and the total number of observations (cells with
+information in them within the observation columns) and compare with the
+data after extraction.
+
+If the syntax is confusing, remember that these operations are
+vectorized, so e.g. colSums is acting on ALL of the observation columns
+(nestdata[,colIndex]) when it sums the number of non-NA cells per
+column, which produces another vector, and then sum is summing ALL of
+the column sums in that 2nd vector.
+
+```{r include = FALSE}
+#nestdata2 <- nestdata
+nestdata <- read_csv("output/nestdata_cols_0829_1539_.txt", 
+                     col_types = cols(.default="c"))#,
+                     #col_select = (-1))
+```
+
+
+```{r include = FALSE}
+# View all unique strings
+for(col in colIndex) { 
+  # print(glue::glue("Unique values in {col} variable:", unique(nestdata[col])))  
+  uV <- paste("Unique values in ",names(nestdata)[col], "variable:", unique(nestdata[col]))
+  filename <- paste0("output/uniqueStr_perColumn_", now, ".txt")
+  write(uV, file = filename, append=TRUE)  
+  } 
+  
+uniqueStr <- vector()          # vector to fill with unique strings
+for(col in colIndex) uniqueStr <- append(uniqueStr, unique(nestdata[col]))
+uniqueStr <- unlist(uniqueStr)
+uniqueUnique <- unique(uniqueStr)
+# nStrings  <- length(uniqueStr) # number of unique strings
+# nStrings  <- length(uniqueUnique) # number of unique strings
+# 
+# #stringsNoE <- str_remove(uniqueUnique, "[0-9][:LETTER:]") # just removes part of string, not whole row where pattern is found
+# 
+# stringE <- str_detect(uniqueUnique, "[0-9][:LETTER:]")
+# stringE <- str_detect(unique(uniqueStr), "[0-9][:LETTER:]")
+stringE <- str_detect(uniqueUnique, "[0-9][:LETTER:]")
+stringNoE  <- uniqueUnique[stringE == F]
+# this should match to what we end up with after extraction
+
+#write(uniqueUnique, sprintf("output/unique_uniqueStr%s.txt", now))
+write(stringNoE, sprintf("output/unique_noE%s.txt", now))
+# Number of observations in each observation column (the columns in colIndex)
+obsPerCol <- colSums(!is.na(nestdata[,colIndex])) 
+
+# Total number of observations in the data before extraction
+totalObs  <- sum(obsPerCol) 
+nUnique   <- length(unique(uniqueStr))
+```
+
+```{r}
+
+```
+
+Now, tell R which strings to look for. They can just be the first part
+of what is written in the cell; what you want is to be as general as
+possible so as to capture as many observations per specified string as
+possible. In addition to making the observation strings more uniform,
+this also allows you to capture only the essential information.
+
+After you type in the strings, use str_extract() to extract the relevant
+bits. Don't use str_extract_all() - it will look for all matches within
+a given string ("all" doesn't refer to all the strings but all the
+matches within the string).
+
+We want one match per string.
+
+The code tells R to print the values of each observation column before
+and after extraction so you can compare them.
+
+"Not" captures the following: "could not find", "not found", "could not locate", "not located", "did not check", "nothing"
+
+A couple have single letters instead of words; F, Hu, 
+
+"wet chick" bc one observation is "adult with chicks - cam"
+
+Or maybe just make all the unique non-egg non-chick strings into a list for extraction 
+
+D and DNL/DNF are going to conflict - it will just extract "D" for all of them
+
+How to tell R to look for "D" with and without other characters after it?
+
+which cols are OK to be NA after extraction? [39,40,59,61,74,76,99]
+I don't see the NAs it says are there in cols 75, 77
+also don't know where the extra 7 obs excluded come from.
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+strings <- c("[0-9][:LETTER:]", "[Bb][Oo][Nn]", "\bH\b", "[Hh]atch", "Hu", "chick behavior", "nest behavior", "wet chick", "pipping", "poops", "[Ff]ail", "\bF\b", "\bW\b", "\bD\b", "depredated", "coyote", "no stick", "stick missing", "not locate", "DNF", "DNL", "not f", "not [Cc]heck", "Didn't check", "not see", "not acc", "not obs", "\bU\b", "unk", "\\?", "empty", "no activity", "nothing", "no chicks or parents")
+# strings <- c("^[0-9][:LETTER:]", "[Bb][Oo][Nn]", "[Hh]atch", "chick behavior", "nest behavior", "pipping", "empty, poops", "[Ff]ail", "D", "depredated", "coyote", "not locate", "DNF", "DNL", "not f", "not check", "not see", "not acc", "not obs", "[Uu]", "\\?", "empty", "no activity", "nothing")
+
+# "D(?!N)", "depredated", "coyote", "no stick", "stick missing", "not locate", "DNF", "DNL", "not f", "not [Cc]heck", "Didn'
+# do the eggs/chicks have to be at the beginning?
+
+strings <- paste(strings, sep = "|", collapse = "|")
+#now <- format(Sys.time(), "%m%d_%H%M_" ) # remove this later)
+
+if(file.exists("output")==FALSE) dir.create("output") 
+filepath1 <- paste0("output/col_repl_", now, ".txt")
+# conn <- file(filepath1, "a")
+
+repCols <- list()
+notExtr <- list()
+for( col in colIndex ) {
+              repCols[[col]] = str_extract( 
+                nestdata[[col]],
+                strings
+              )
+    # write only relevant cells to the file
+    # want to ignore NAs in oldCol, in case NAs intoduced in new col
+    # writeLines(c(col,': oldCol = ',paste(nestdata[[col]], sep=" "),'\n'), conn)
+    # writeLines(c(col,': oldCol = ',t(nestdata[[col]])), conn)
+    # paste(col,': oldCol = ',paste(nestdata[[col]], sep=" "),'\n')
+    oldCol <- nestdata[[col]]
+    #browser()
+    newCol <- repCols[[col]]
+    ID     <- nestdata$nest
+    # Cols   <- merge(oldCol, newCol)
+    Cols   <- cbind(ID, oldCol)
+    Cols   <- as.data.frame(cbind(Cols, newCol))
+    #browser()
+    Cols   <- subset(Cols, !is.na(oldCol))
+    
+    #notExtr <- append(notExtr, c(col, c(which(is.na(Cols$newCol)))))
+    notExtr[[length(notExtr)+1]] <- c(col,":", which(is.na(Cols$newCol)))
+    #notExtr[[length(notExtr)+1]] <- c(names(nestdata)[col],":", which(is.na(Cols$newCol)))
+    #append(notExtr, c(col, which(is.na(newCol))))
+    #if(col==30) colNA <- which(is.na(newCol))
+    # colNA <- whichV(is.na(Cols[1]))
+    #browser()
+    # if(col == 30) colNA <- which(is.na(Cols[8,V]))
+    # if(col==30){
+    #   colNA <- Cols[,unname(apply(Cols[8,], 1, function(x) which(is.na(x))))]
+    # }
+    #tf4[,unname(apply(tf4['INTENSITY2',],1,function(x) which(x>10)))]
+    #for(c in nrow(Cols)) append(notExtr, c(which(is.na(Cols[c])),col))
+    # for(c in nrow(Cols)) {
+    #   append(notExtr, 
+    #          c(Cols[,unname(apply(Cols[c,], 1, function(x) which(is.na(x))))],
+    #            col))
+    # }
+      # append(notExtr, c(Cols[[1]][which(is.na(Cols[[3]]))], 
+      #                   names(nestdata)[col]))
+      # append(notExtr, c(Cols[which(is.na(Cols[[3]])),], 
+      #                   names(nestdata)[col]))
+      # append(notExtr, Cols[which(is.na(Cols$newCol)),])
+                        
+    
+    # write(paste("\n column", names(oldCol), "\n", sep=" "), 
+    #       file=filepath1, append=T)
+    # write( names(oldCol), file=filepath1, append=T)
+    # write(cat(' column', names(oldCol), ' \n'), file=filepath1, append=T)
+    
+    # column <- paste("\n column: ", col, "\n nest ID - old vs. new \n")
+    column <- paste("\n column: ", col)
+    write(column, file=filepath1, append=T)
+     
+    write.table(Cols,          file = filepath1, 
+                append = T,    sep="||",
+                col.names=T, row.names = F) 
+    # avoid warnings by not printing col names
+    # but with col.names = F, you get "New names:" for each df
+    
+    
+    # writeLines(Cols)
+    # writeLines(c(col,': newCol = ',paste(newCol, sep=" "),'\n\n'), conn) # compare new & old
+    # writeLines(c(col,': newCol = ',t(newCol)), conn) # compare new & old
+    # paste(col,': newCol = ',paste(newCol, sep=" "),'\n\n')  # compare new & old
+}
+#write(unnest(as.data.frame(notExtr), file=sprintf("not_extracted_%s.txt",now)))
+```
+It says j_40, row 22 was not extracted, but that was NA before the extraction! should have been removed
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+#now <- format(Sys.time(), "%m%d_%H%M_" ) # remove this later)
+filename <- sprintf("output/not_extr_%s.txt", now)
+write("obs = NA after extract\n\ncol : row numbers\n", file=filename)
+for(n in 1:length(notExtr)) {
+  # a <- unlist(notExtr[n])
+  x <- unlist(notExtr[n])
+  write(x, file=filename, append=TRUE, ncolumns = length(x))
+}
+
+# close(conn)
+# write(paste('\n hello', names(nestdata[[2]]), '\n', sep = ' '), file="boop.txt")
+```
+
+If the new columns look good on visual inspection, go ahead and run the
+extraction command:
+
+```{r}
+for ( col in colIndex ) nestdata[[col]] = repCols[[col]] # replace old column with new
+```
+
+
+```{r}
+uniqueStr2 <- vector()          # vector to fill with unique strings
+for(col in colIndex) uniqueStr2 <- append(uniqueStr2, unique(nestdata[col]))
+uniqueStr2 <- unlist(uniqueStr2)
+uniqueUnique2 <- unique(uniqueStr2)
+stringE_after <- str_detect(uniqueUnique2, "[0-9][:LETTER:]")
+stringNoE_after  <- uniqueUnique2[stringE_after == F]
+write(stringNoE_after, sprintf("output/unique_noE_after%s.txt", now))
+# this should match to what we end up with after extraction
+```
+
+Now, as a precaution, we will count the unique strings and total number
+of observations in the dataframe post-extraction and compare it to the
+values we got before (which we stored as obsPerCol and totalObs)
+
+```{r}
+obsPCAfter  <- colSums(!is.na(nestdata[,colIndex])) # total per column
+totObsAfter <- sum(obsPCAfter)                      # total observations
+
+differ <- obsPerCol == obsPCAfter
+# comparing befor and after, which columns differ in the number of observations that == NA?
+diffC <- which(differ==F) # ooo, it has names, that is cool
+
+# 3o obs not picked up
+
+# uniqueStr2 <- vector()    # to store unique strings from after extraction
+# for(col in colIndex) uniqueStr2 <- append(uniqueStr2, unique(nestdata[col]))
+# length(uniqueStr2)        # compare to number of unique str before extraction
+```
+
+
+### Tidy up loose ends and write to csv
+
+Now we will remove any nests where final fate == NA, but we will keep a
+tally and record which nests we removed, so we can see if any nests
+needed for analysis are being removed and correct their final fate.
+
+```{r}
+fateNA     = nestdata$nest[which(is.na(nestdata$final_fate) )] # store nest num
+numNA_fate = length(fateNA)                                    # count them
+nestdata   = nestdata[!is.na(nestdata$final_fate),]            # rm the rows
+
+# we save it as a new df so we can compare the two
+```
+
+And now, write your cleaned data to csv so you can skip the preceding
+steps and simply load it in:
+
+```{r}
+#nestdataC <- apply(nestdata, 2, as.character)
+if(file.exists("nest_data")==FALSE) dir.create("nest_data") 
+filename_ <- paste0("nest_data/nest_data_combined_", now, ".csv")
+write.csv(nestdata, filename_) # new file
+
+#nestDataD <- as.data.frame(nestdata)
+```
+
+***
+
+## Dealing with special cases ------------------------------------------------------
+
+Next up: more formatting! We need to deal with special observation
+cases, such as:
+
+1.  Abandoned nests often have eggs in the last observation; we need to
+    make sure this isn't picked up as "alive"
+
+2.  Some hatched nests have '0E' in the last observation; we need to
+    change to 'hatch' so it's not interpreted as nest failure
+
+3.  Some chicks from hatched nests were recorded in the data sheet on
+    dates subsequent to the "final observation" for nest fate - need to
+    get rid of those so the nest doesn't stay 'alive' past hatch
+
+First, load the data from the previous section if applicable :
+
+```{r}
+nestData <- read_csv('nest_data/nest_data_combined_0829_1539_.csv',
+                     col_types = cols(.default="c"))
+
+nestData <- nestdata
+# when reading in the file, some observations have the "E" removed from them
+# I think it's just when read_csv guess the coltypes - whichever columns have 
+# observations in the first few rows get interpreted as numeric 
+# just have to specify the type in the col_types argument
+```
+
+### Check some nest data
+
+At any point in the process (until ~line 250, when the dataframe name changes),
+if you'd like to look at the row for a specific nest and compare it to e.g. the
+Excel file row, simply put the nest number in quotes in the following code:
+
+```{r}
+nestNum  = "10241" # nest number - don't forget year prefix and quotes!
+nestview <- nestData[nestData$nest==nestNum,]
+nestview
+```
+
+Or view the numbers of all nests currently in the dataframe:
+
+```{r}
+nestData$nest 
+```
+
+### Make observations into rows
+
+Now we will use dplyr's "pivot_longer" to make each observation of each
+nest a separate row, as is needed for many analyses. This will result in
+a dataframe where each nest has as many rows as it has observations,
+with format of: nest ID, nest info columns, season-day, status on that day.
+
+Beforehand, we will convert everything to class "character" (chr) so the
+columns behave well together.
+
+```{r}
+nestData <- as.data.frame(nestData)
+nestData  <- nestData %>% mutate(across(where(is.numeric),as.character))
+
+#weirdStatus <- nestData[which(nestData$status %in% c(0:4)),] # which ones don't have "E"? 
+nestData  <- nestData %>%  
+pivot_longer(cols=starts_with("j_"), 
+             names_to  ="season_day", # each season-day (col) gets its own row
+             names_prefix = "j_",   # remove prefix
+             names_transform = as.integer,
+             values_to = "status",    # individual obs move to status column
+             values_drop_na = TRUE) 
+#weirdStatus <- nestData[which(nestData$status %in% c(0:4)),] # which ones don't have "E"? 
+```
+
+After a visual check of the "long" dataframe, we will calculate the
+observation interval (days between each nest observation).
+
+This requires converting some numeric variables back to integers.
+
+We also check which status observations have an obs interval of more than 6 
+and which ones have no observation interval.
+
+In addition, we will create a column of T/F whether the observation in that
+row is the final observation of the nest or not. If nests do not have a value
+for k, this will be NA.
+
+```{r, warning=FALSE}
+# nest needs to be integer bc we subtract nest numbers later
+nestData <- nestData %>% 
+  mutate(across(c(i,j,k,nest,season_day,cov_1m,cov_5m), as.integer)) %>%
+  mutate(across(c(i,j,k), function(x) x-13)) %>% # convert to season-days
+  mutate(last_obs = k == season_day ) # is it the last observation of the nest?
+
+# is obs of same nest as prev row? 0 = yes; 1 = no
+nestData$same_ID <- c(1, diff(nestData$nest)) # diff = lagged difference
+subtractPrev <- function(day) day - lag(day)  # lag = value from prev row
+
+nestData$obs_int   <- ifelse(
+  nestData$same_ID== 0, subtractPrev(nestData$season_day), 0)
+
+# if any obs int is greater than 6, check to make sure we didn't miss obs
+# longObs <- unique(nestData$nest[which(nestData$obs_int > 6)]) # which nests?
+longObs <- which(nestData$obs_int > 6)         # which rows?
+noObsInt <- which(is.na(nestData$obs_int))
+
+```
+
+Now we can calculate the nest initiation dates using either the
+estimated hatch date or, if not available, the actual hatch date (for
+hatched nests). Before the calculation, we will see which nests do not
+have an estimated or real hatch date, and correct any if possible.
+
+```{r}
+no_HD <- nestData$nest[which(is.na(nestData$estHD) & nestData$final_fate!="H")]
+```
+
+To calculate the initiation dates, we need to convert the hatch dates
+and fate classification dates to season-days.
+
+We create a function that calculates the initiation date based on the
+incubation time of the species.
+
+We will calculate initiation date for all nests with estimated hatch
+dates. Then for each remaining nest that has a value for fate date (no
+NAs), we will ask a) did it hatch? and b) does it not have an initiation
+date? If both are true, use the actual hatch date to calculate
+initiation; if not, just fill in the previously calculated value of
+init_date.
+
+Finally, use the estimated initiation date to estimate nest age.
+
+```{r}
+nestData$estHD     <- sday(nestData$estHD)
+nestData$fate_date <- sday(nestData$fate_date)
+
+init <- function(date, species) {
+  
+  inc = case_when( species == "WIPL" ~ 28,
+                   species == "LETE" ~ 19,
+                   species == "CONI" ~ 16 )
+  return(date-inc) 
+}
+
+nestData <- nestData %>%
+  mutate(init_date = init(estHD, species)) %>%
+  mutate(final_obs = ifelse(last_obs==T, status, NA))%>%
+  mutate(init_date = ifelse(
+    final_fate=="H" & !is.na(fate_date) & is.na(init_date), 
+    init(fate_date, species),
+    init_date))
+
+nestData$nest_age <- nestData$fate_date - nestData$init_date
+```
+
+Now we can deal with all the aforementioned special cases at once,
+making sure the model doesn't mark abandoned nests with eggs as "alive"
+or hatched nests with no eggs as "failed", and getting rid of chick
+observations past the "final observation" date as specified by k:
+
+1.  The last observation for all abandoned nests == "failed"
+2.  The last observation for all hatched nests == "hatch"
+3.  If observation date is past the value of k, status is NA
+4.  For everything else, use whatever value of status they already have.
+5.  "Not found" or similar does not necessarily mean failure. Sometimes nests were lost and then found on later surveys.
+```{r}
+unique(nestData$status)
+notFound <- c("not locate", "not f", "nothing", "no activity", "not check", "not see", "not acc", "not obs", "DNL", "U", "unk", "?", "no stick", "stick missing")
+nestData$lost <- nestData$status %in% notFound
+# nestData$found <- 
+lostnest <- nestData$nest[which(nestData$lost == T)]
+```
+
+
+```{r}
+lostN <- nestData %>% 
+  #filter(lost == TRUE & season_day < k) %>% # only select those obs
+  filter(nest %in% lostnest) %>%
+  group_by(nest) %>%
+  summarize(status = list(status),
+            final_fate = last(final_fate),
+            final_obs = max(season_day),
+            k         = last(k))
+
+# kNA <- unique(nestData$nest[which(is.na(nesVtData$k))])
+```
+
+```{r}
+
+```
+
+```{r}
+nestData <- nestData %>%
+  # filter(!is.na(k)) %>%
+  mutate(status = as.character(status)) %>%
+  mutate(status = case_when( 
+    last_obs == TRUE & final_fate == "A"  ~ "fail",
+    last_obs == TRUE & final_fate == "H"  ~ "hatch",
+    season_day > k                        ~ NA,
+    lost == TRUE     & season_day < k     ~ "unknown",
+    TRUE                                  ~ status ))
+
+# NB: none of the above will work if k==NA
+
+statusStr <- unique(nestData$status)
+write(statusStr, sprintf("output/status_strings%s.txt", now))
+statusStr
+# actN <- nestData$nest[which(nestData$status == "unknown")]
+
+```
+
+
+
+```{r}
+setdiff(lostnest, actN) # order matters!
+```
+
+
+```{r}
+#nestData[nestData$nest==,]
+
+```
+
+
+```{r}
+# nestData1 <- nestData %>% filter(!is.na(status))
+# 
+# statusStr1 <- unique(nestData1$status)
+# statusStr1
+```
+
+
+```{r}
+# check <- nestData1 %>% 
+#   filter(final_fate %in% c("A","H")) %>%
+#   group_by(nest) %>%
+#   summarize(status = list(status), fate = last(final_fate), k = last(k), final=max(season_day))
+# 
+# check2 <- nestData1 %>%
+#   filter(final_fate %in% c("D", "Ca", "Hu", "S")) %>%
+#   group_by(nest) %>% 
+#   summarize(status = list(status), fate = last(final_fate), k = last(k), final=max(season_day))
+# 
+# check3 <- nestData1 %>%
+#   filter(final_fate %in% c("U", "U?", "U-H")) %>%
+#   group_by(nest) %>% 
+#   summarize(status = list(status), fate = last(final_fate), k = last(k), final=max(season_day))
+
+# make a thing to view all the statuses for nests with given fate
+```
+
+Then we will convert all the observation strings to a simpler format:
+nest is alive (TRUE) or not (FALSE).
+
+We do this by specifying all the status strings that correspond to a
+nest being active/"alive", and then asking whether each status
+observation is in that list or not, leaving us with a T/F for "is the
+nest active that day?"
+
+First, we need to determin which strings are classified as "alive"
+
+```{r}
+statusStr <- unique(nestData$status)
+statusStr
+write(statusStr, sprintf("output/status_strings_after%s.txt", now))
+
+# weirdStatus <- nestData[which(nestData$status %in% c(0:4)),] # which ones don't have "E"? 
+# but I don't see any evidence in the column replace file
+```
+
+We will save the nest status data of each nest to csv by grouping by
+nest (collapsing all rows for nest X into one row) with status condensed
+into a single list (since each nest is one row now) and keeping final
+fate.
+
+We also need to do something with the unknown statuses from nests that were
+found again eventually (and still active)
+
+```{r}
+nestData <- nestData %>% filter(!is.na(status))
+# alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', '[Hh]atch', 'poops') 
+alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', 'hatch', 'poops') 
+
+dead  = c('F', "fail", "0E", "D", "W", "empty", "0e", "no activity", "coyote", "no chicks or parents", "nothing", "no activity")
+
+nestData <- nestData %>% 
+  mutate( status = ifelse(status!="unknown", 
+                          as.integer( status %in% alive ),
+                          status
+                          ))# %>%
+  # group_by(nest) %>%
+  # summarize(status = list(status))
+
+
+nestStatus <- nestData %>% 
+  group_by(nest) %>% 
+  summarize(status = list(status), final_fate = last(final_fate))
+# nestStatus <- nestData %>% 
+#   group_by(nest) %>% 
+#   summarize(status = list(status), final_fate = last(final_fate))
+
+filename2 <- paste0("output/nest_status_", now, ".csv")
+
+nestStatus %>%  
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|')) %>%
+  write.csv(filename2, row.names = FALSE)
+
+# you could view the status lists again by nest fate to see how they changed
+```
+
+Now we recode the final fates and the camera fates so they're numeric,
+and see if any were not converted correctly and are NA.
+
+We also account for capitalization in the "camera" column (Y/N camera or
+not)
+
+We can also see which of the NA-fate nests have cameras, and then see
+which nest R has marked as having a camera (and how many) in order to
+make sure all camera nests have been picked up.
+
+```{r}
+nestData <- nestData %>% 
+  mutate(final_fate = case_match(final_fate,
+                                 "H"   ~ 1, 
+                                 "F"   ~ 0, 
+                                 "D"   ~ 2,
+                                 "S"   ~ 3,
+                                 "A"   ~ 4,
+                                 "Hu"  ~ 5,
+                                 "Ca"  ~ 6,
+                                 "U"   ~ 7,
+                                 "U?"  ~ 7,
+                                 "U-H" ~ 8
+         ),
+         
+         cam_fate = case_match(cam_fate,
+                               "H"  ~ 1, 
+                               "F"  ~ 0, 
+                               "D"  ~ 2,
+                               "S"  ~ 3,
+                               "A"  ~ 4,
+                               "Hu" ~ 5,
+                               "Ca" ~ 6,
+                               "U"  ~ 7
+         ), 
+         camera = ifelse(camera=="Y"|camera=="y", TRUE, FALSE)
+         
+  )
+
+# fate_NA <- sum(is.na(nestData$final_fate))             # how many NA fate?
+fate_NA <- unique(nestData$nest[which(is.na(nestData$final_fate))])  # which nests?
+nestData$nest[which(nestData$camera == T & is.na(nestData$final_fate))] 
+
+nestData <- nestData[!is.na(nestData$final_fate),] # REMOVE NAs
+
+camNests <- unique(nestData$nest[which(nestData$camera == T)]) # cam nest IDs
+length(camNests) # how many nests with cameras, according to R?
+```
+
+We can filter to the relevant sites and species, filter out 2021, and then see how many
+camera nests remain:
+
+```{r}
+nestData_fil <- nestData %>% 
+  filter(site %in% c("RUTW", "RUTE")) %>%
+  filter(species %in% c("CONI", "LETE")) %>%
+  filter(year %in% c(2019,2020))
+
+camNests2 <- unique(nestData_fil$nest[which(nestData_fil$camera == TRUE)])
+length(camNests2) # how many camera nests once sites/species/years excluded?
+```
+
+If all looks correct, write the final cleaned and formatted datset
+(still in long format) to csv:
+
+```{r}
+# not going to remove 2021 yet
+nestData <- nestData %>% 
+  filter(site %in% c("RUTW", "RUTE")) %>%
+  filter(species %in% c("CONI", "LETE"))
+# now = "0830_722"
+if(file.exists("nest_data")==FALSE) dir.create("nest_data") 
+filename2 <- paste0("nest_data/nest_data_cleaned_",now,".csv")
+write.csv(nestData, filename2)
+# write.csv(nestData[-1], filename2)
+```
+
+We can also format the nest data further for use in the GLM and the
+Bayesian DSR model. First, load in the data and packages if necessary.
+```{r}
+
+ remove(list=ls())
+# setwd("C:/Users/sarah/Documents/nest_models")
+
+library(stats)
+library(tidyverse)
+library(car)
+
+# give all files created from this document a shared suffix that is unique to 
+# the specific run
+now = format(Sys.time(), "%m%d_%H%M_")
+
+sday <- function(date){ # converts dates to season-days starting at a given date
+
+  date <- as.Date(
+    lubridate::parse_date_time(date, c("%d-%b", "%m/%d/%Y"), exact = TRUE))
+  
+  yday(date) - 103 # actual Julian date minus no. days from 1 Jan - 13 Apr
+  #yday(date) - 90 # actual Julian date minus no. days from 1 Jan - 1 Apr
+  #yday(date) - 110 # actual Julian date minus no. days from 1 Jan - 20 Apr
+} 
+```
+
+```{r}
+# nestData <- read_csv("nest_data_cleaned_0829_1155_.csv",col_types = cols(.default="c"))
+nestData <- read_csv("nest_data/nest_data_cleaned_0906_0949_.csv",
+                     col_types = cols(.default="c"))
+# nestData3 <- nestData
+# nestData <- nestData
+```
+
+***
+
+## Formatting for DSR models ------------------------------------------------
+
+Let's start with the DSR models, which require less formatting. This
+data will become 2 datasets per DSR model: one w/ camera fates included
+and one without.
+
+We can remove nests with unknown final fate--all nests with (original) fates of
+"U" "U?" and "U-H"--which includes nests that were not tracked to final fate
+and nests whose fate was not clear based on the field data. 
+
+We will remove all nests with fates 7 and 8. As before with "NA" fate nests, we 
+will record the nest numbers so we know which nests are being excluded, as well
+as how many.
+
+```{r}
+# unk     <- c("U?", "U-H") # all possible entries for unknown fate
+# # ndDSR   <- ndDSR %>% mutate(final_fate==unk = "U") # 
+# ndDSR   <- nestData %>% mutate(final_fate = 
+#                                  ifelse(final_fate %in% unk, "U", final_fate)) # 
+# unknown <- ndDSR$nest[(which(ndDSR$final_fate == ("U")))] # keep track of U nests
+# 
+# ndDSR   <- ndDSR[ndDSR$final_fate != "U",] # remove
+# 
+# # look for any status observation that does not have a value of 1-6 to see if
+# # any unknown fate nests are still in the data
+# # stillU  <- ndDSR[which(setdiff(ndDSR$status, c(1:6))),]  
+# stillU  <- ndDSR[setdiff(ndDSR$status, c(1:6)),]  
+
+# ndDSR <- nestData %>% mutate(final_fate=ifelse(final_fate == 8,7,final_fate))
+
+# make sure i,j,k values make sense:
+# 
+ijk     <- nestData %>%
+  filter(!is.na(k)) %>%
+  group_by(nest) %>%
+  summarize(status= list(status), i=max(i), j=max(j), k=max(k), final_day=max(season_day))
+
+totNest <- unique(nestData$nest)
+
+unknown <- nestData[nestData$final_fate %in% c(7,8),]
+uNests  <- unique(unknown$nest)
+#uNests  # view all nests with unknown fate
+kNA     <- which(is.na(nestData$k)) # which rows
+kNAnest <- unique(nestData$nest[(which(is.na(nestData$k)))])
+
+
+nestRm  <- union(uNests, kNAnest) # which nests being removed
+nestRm                            # view them
+
+checkNests <- nestData %>% group_by(nest) %>%
+  #summarize(final = last(status),
+  mutate(final_fate = as.character(final_fate)) %>% # col types must match
+  mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>%
+#checkNests <- checkNests %>% group_by(nest) %>%
+  summarize(
+            final_day = max(season_day),
+            k=last(k),
+            status= list(status_), #%>%
+            final_obs = last(status_),
+            final_fate = last(final_fate)
+  ) 
+
+goodNests <- checkNests %>%
+  filter(final_fate %in% c(0:6), !is.na(k)) %>%
+  filter( lengths(status) > 1)
+# after summarizing, status_ doesn't exist anymore
+  #filter(final == final_fate)
+  #
+```
+Remember the nest fate codes:
+                                 "H"   ~ 1, 
+                                 "F"   ~ 0, 
+                                 "D"   ~ 2,
+                                 "S"   ~ 3,
+                                 "A"   ~ 4,
+                                 "Hu"  ~ 5,
+                                 "Ca"  ~ 6,
+
+```{r}
+# ijk     <- c(i,j,k)
+ndDSR   <- nestData %>% # something is setting status to 0 for every row
+  # mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>%
+  mutate(status = ifelse(last_obs == T, final_fate, status)) %>%
+  # seems to be !is.na(k)
+  # also, k values are way off again...
+  # group_by(nest) %>%
+  # summarize(
+  #           final_day = max(season_day),
+  #           k=last(k),
+  #           status= list(status_), #%>%
+  #           final_obs = last(status_),
+  #           final_fate = last(final_fate)
+  # ) %>% 
+  # 
+  filter(final_fate %in% c(0:6), !is.na(k))
+  # mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>%
+  # filter(status_ %in% c(0:6)) %>% 
+cat("final fate frequency:\n")
+table(ndDSR$final_fate)
+cat("\n\nNests in DSR model:\n\n")
+unique(ndDSR$nest) # which nests are left?
+
+```
+
+```{r}
+nestCam  <- unique(ndDSR$nest[!is.na(ndDSR$cam_fate)])
+# camera nests left after removing k==NA AND filtering out U fate nests
+ndDSRcam <- ndDSR %>%
+  # mutate(status = ifelse(last_obs == T & camera == T & !is.na(cam_fate), 
+  mutate(status = ifelse(last_obs == T & !is.na(cam_fate), 
+                         cam_fate,
+                         status),
+         k      = ifelse(camera == T & !is.na(fate_date),
+                         fate_date,
+                         k))
+```
+
+Check that everything was transformed the way we expected:
+
+```{r}
+# good <- unique(ndDSR$nest[which( max(ndDSR$status) == ndDSR$final_fate )])
+
+#   #
+# bad <- good %>% 
+#   filter(final_day != k)
+# 
+# alsoBad <- good %>%
+#   filter(lengths(status)<2) # note function "lengths"
+# 
+# weirdNests <- good$nest[which(good$final_day != good$k)]
+# 
+
+
+```
+
+
+
+------------------------------------------------------------------------
+
+### Program MARK 
+
+If we want to use the data in Program MARK, we need the following:
+
+-   nest ID
+
+-   nest observation history
+
+-   values for i (first found), j (last seen active), and k (last
+    observed)
+
+-   does any other nest have this exact history?
+
+-   covariate values, if applicable
+
+For hatched nests, j will often == k because the final observation is of
+newly-hatched chicks.
+
+```{r}
+ndMARKfld <- ndDSR %>%                  # field data (no cameras) 
+  #filter(camera == FALSE) %>% 
+  mutate(status = ifelse(status == 1, 0, 1),
+         fate   = ifelse(final_fate==1,0,1) )%>%  # in MARK, 0=alive, 1=dead
+  group_by(nest, site, species) %>%   
+  select(nest, final_fate, fate, status, i, j, k, cov_5m, nest_age) %>%
+  summarize(status = list(status), 
+            across(where(is.integer), last),
+            across(where(is.numeric), last),
+            across(where(is.character), first)
+  ) %>%
+  mutate_if(is.list, ~paste(unlist(.), collapse = ',')) 
+ndMARKfld$nocc <- max(ndDSR$season_day)
+```
+
+For the data including the cameras, keep "fate_date" because that will become the new "k" (the camera lets us know exactly how long the nest survived during the final observation interval instead of guessing)
+
+```{r}
+ndMARKcam <- ndDSRcam %>%                  # field + camera data
+  mutate(status = ifelse(status == 1, 0, 1),
+         fate   = ifelse(final_fate==1,0,1) )%>%  # in MARK, 0=alive, 1=dead
+  group_by(nest, site, species) %>%   
+  select(nest, status, i, j, k, final_fate, fate, cov_5m, nest_age, cam_fate ) %>%
+  # summarize(lastObs = last(status),
+  summarize(status = list(status), 
+            across(where(is.integer), last),
+            across(where(is.numeric), last),
+            across(where(is.character), first)
+  ) %>%
+  # mutate(lastObs = ifelse(cam_fate == 1, 0, lastObs)) %>% # ???
+  
+  mutate_if(is.list, ~paste(unlist(.), collapse = ',')) 
+
+ndMARKcam$nocc <- max(ndDSR$season_day)
+```
+
+Now save the MARK data to csv:
+
+```{r}
+# now = "830_1826"
+if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename <- paste0("model_data/MARK_data_field_",now,".csv")
+write.csv(ndMARKfld, filename)
+
+filename <- paste0("model_data/MARK_data_cam_",now,".csv")
+write.csv(ndMARKcam, filename)
+```
+
+------------------------------------------------------------------------
+
+### Bayesian logistic exposure model
+
+Unlike Program MARK, the Bayesian multinomial logistic DSR model allows us to include multiple causes of nest failure, like we coded for earlier. Now we can reformat the nest fates so that there are fewer categories, which should make DSR model interpretation easier.
+
+(In reality, how many causes of failure can we include and still be able to interpret the model output? Do I have too many?)
+
+The "cattle" category includes both nests that were destroyed by cattle
+and nests that were abandoned because of cattle disturbance. We will
+lump the cattle-destroyed nests in with human-destroyed nests, and
+cattle-abandonment nests with all other abandoned nests. These are the
+new categories:
+
+0 - failed (unknown/unspecified) \| 1 - hatched 
+2 - depredated \| 3 - storm-related (surge, flooding) 
+4 - abandoned \| 5 - destroyed (human, cattle)
+
+```{r}
+# visually inspect nests with fate Ca and Hu in the Excel sheet to look for 
+# notes about specific cause of failure and status of nest at last observation 
+# (were there still eggs, but abandoned due to disturbance, or were eggs 
+# destroyed?)
+
+chNests <- ndDSR %>% 
+  filter(final_fate %in% c(5,6) | cam_fate %in% c(5,6)) %>%
+  mutate(nest = as.character(nest),  # data types must match to join 
+         final_fate = as.character(final_fate)) %>%
+  # mutate(notes = allData$NOTES) %>%
+  group_by(nest) %>%
+  summarize(final_fate = last(final_fate),
+            cam_fate   = last(cam_fate),
+            final_obs  = last(final_obs),
+            status     = list(status)) 
+# chNests <- chNests %>% left_join(allData, by = join_by(nest)) 
+# join by both nest and final_fate to avoid duplicating final_fate
+# except that seems to make NOTES == NA?
+# chNests1 <- chNests %>% left_join(allData, by = join_by(nest, final_fate)) 
+# notes <- read_delim("output/field_notes_0830_1438_.csv", 
+notes <- read_csv("output/field_notes_0830_1438_.csv",
+                  # col_names = c("nest", "notes"),
+                  col_types = cols(.default="c"),
+                  col_select= c(2:3)
+)
+
+names(notes) <- c("nest", "notes")
+
+nfates <- table(ndDSR$final_fate)
+ncfates <- table(ndDSR$cam_fate)
+
+                  # col_select = c(starts_with("allData"))
+                  # delim = " "
+                  # )# only loading one column
+# chNests1 <- chNests %>% left_join(allData, by = join_by(nest )) 
+chNests1 <- chNests %>% left_join(notes, by = join_by(nest )) 
+chNests1 <- chNests1 %>%  select(nest, status, cam_fate, final_fate, final_obs, notes)
+# chNests1 <- chNests1 %>%  select(nest, status, cam_fate.x, final_fate.x, final_obs, NOTES)
+
+dsKey <- c("destroyed", "crushed", "cracked", "trampled", "run over", "Ran over", "Stick broken")
+abKey <- c("cold", "abandoned", "getting eaten by ants", "loose egg")
+```
+
+
+```{r}
+# for(n in nrow(chNests1)) append(newF, str_extract(chNests1$NOTES[n], dsKey))
+# for(n in 1:nrow(chNests1)) newF[[n]] <- str_extract(chNests1$NOTES[n], dsKey)
+# newF2 <- list()
+# for(n in 1:nrow(chNests1)) newF2[[n]] <- str_extract(chNests1$NOTES[n], abKey)
+
+# newF <- coalesce(newF, newF2)
+# newF <- 
+# for(n in 1:nrow(chNests1)) {
+#   newF[[n]] <- case_when(
+#     !is.na(str_extract(chNests1$NOTES[n], dsKey)) ~ "Ds",
+#     !is.na(str_extract(chNests1$NOTES[n], abKey)) ~ "A",
+#     !is.na(str_extract(chNests1$NOTES[n], "tracks")) & chNests1$final_obs %in% dead ~ "Ds", 
+#     !is.na(str_extract(chNests1$NOTES[n], "tracks")) & chNests1$final_obs %in% alive ~ "A",
+#   ) 
+# for(n in 1:nrow(chNests1)) {
+#   newF[[n]] <- case_when(
+#     all(!is.na(str_extract(chNests1$NOTES[n], dsKey))) ~ "Ds",
+#     all(!is.na(str_extract(chNests1$NOTES[n], abKey))) ~ "A",
+#     all(!is.na(str_extract(chNests1$NOTES[n], "tracks"))) & chNests1$final_obs %in% dead ~ "Ds",
+#     all(!is.na(str_extract(chNests1$NOTES[n], "tracks"))) & chNests1$final_obs %in% alive ~ "A",
+#   )}
+# for(n in 1:nrow(chNests1)) {
+#   # newF[[n]] <- case_when(
+#   newF[n] <- case_when(
+#     !all(is.na(str_extract(chNests1$NOTES[n], dsKey))) ~ "Ds",
+#     !all(is.na(str_extract(chNests1$NOTES[n], abKey))) ~ "A",
+#     !all(is.na(str_extract(chNests1$NOTES[n], c("track","print")))) & chNests1$final_obs %in% dead ~ "Ds",
+#     !all(is.na(str_extract(chNests1$NOTES[n], c("track","print")))) & chNests1$final_obs %in% alive ~ "A",
+#   )
+# }
+# chNests1[which(is.na(newF) == is.na(chNests1$NOTES)),]
+# which((is.na(newF) == is.na(chNests1$NOTES))==F)
+# notmatch <- which(newF != chNests1$final_fate.x)
+# already accounted for NA, so this should be the ones w/ no useful info in notes
+# otherwise the NAs in one list should match the locations of NAs in the other
+# which(chNests1)
+# chNests1$NOTES[1]
+# newF[[11]] <- !anyNA(str_extract(chNests1$NOTES[11], dsKey))
+# chNests1$new_f <- 
+# for(n in 1:nrow(chNests1)){
+#   chNests$newF <-
+#     case_when(!is.na(str_extract(chNests1$NOTES[n], dsKey))~"Ds",
+#               !is.na(str_extract(chNests1$NOTES[n], abKey))~"A",
+#             TRUE                                        ~chNests$final_fate[n])
+# }
+# newF[[11]] <- str_extract(chNests1$NOTES[11], dsKey)
+# for(n in 1:nrow(chNests1)) {
+  # str_extract(chNests1$NOTES[n], dsKey)
+# }
+# chNests2 <- chNests1 %>%
+#   mutate(new_fate = case_when(
+#   ))
+#     str_extract(NOTES, dsKey ) ~ "Ds",
+#     str_extract(NOTES, abKey) ~ "A"))
+#Caused by error in `str_extract()`:
+# ! Can't recycle `string` (size 75) to match `pattern` (size 7).
+# Backtrace:
+# # chNests1$NOTES[!is.na(chNests1$NOTES)]
+# # chNests1 <- chNests %>%  left_join(allData, by = join_by(nest)) 
+
+# chNests$notes <- allData$NOTES[allData$nest %in% chNests$nest]
+# chNests$notes <- allData$NOTES[allData$nest == chNests$nest]
+
+# chNests <- unique(chNests$nest) %>%
+
+  # mutate(notes = allData$NOTES[allData$nest %in% chNests$nest])
+  # mutate(notes = allData$NOTES[allData$nest == chNests$nest])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which()])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which(allData$nest == nest)])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which(allData$nest == chNests$nest)])
+
+# notes   <- data$NOTES[data$nest %in% chNests$nest,]
+# notes   <- allData$NOTES[nestData$nest %in% chNests$nest]
+# notes   <- V
+
+# write(notes, sprintf("output/Ca_Hu_notes_%s.txt", now))
+# write("notes from Ca and Hu fate nests", sprintf("output/Ca_Hu_notes_%s.txt", now))
+# for(n in chNests) k
+
+
+
+```
+
+Insert the nest numbers of nests whose fate needs to change to abandoned or destroyed below, and their fates will be converted accordingly:
+
+```{r}
+alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', 'hatch', 'poops') 
+
+dead  = c('F', "fail", "0E", "D", "W", "empty", "0e", "no activity", "coyote", "no chicks or parents", "nothing", "no activity")
+```
+
+
+```{r}
+newF <- list() 
+
+for(n in 1:nrow(chNests1)) {
+  # newF[[n]] <- case_when(
+  newF[n] <- case_when(
+    !all(is.na(str_extract(chNests1$notes[n], dsKey))) ~ "Ds",
+    !all(is.na(str_extract(chNests1$notes[n], abKey))) ~ "A",
+    !all(is.na(str_extract(chNests1$notes[n], c("track","print")))) & chNests1$final_obs %in% dead ~ "Ds",
+    !all(is.na(str_extract(chNests1$notes[n], c("track","print")))) & chNests1$final_obs %in% alive ~ "A",
+    TRUE ~ NA
+  )
+}
+
+which((is.na(newF) == is.na(chNests1$notes))==F)
+newF[newF=="Ds"] <- 5
+newF[newF=="A"]  <- 4
+nest <- chNests1$nest
+
+newnewF <- as.data.frame(cbind(nest, newF))
+
+# newF <- data.frame(nest=nest, fate=newF) # interpreted as x and y values
+# newF <- data.frame(nest=nest, fate=newF)
+# ndDSR <- nestData %>% mutate(final_fate = ifelse())
+
+# ndDSR <- nestData %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+  # mutate(finalfate = modify_if(final_fate %in% c("A", "Hu"), newF))
+#Caused by error in `modify_if()`:
+# ℹ In index: 1.
+# Caused by error:
+# ! `.p()` must return a single `TRUE` or `FALSE`, not NULL.
+# ndDSR <- nestData %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+```
+
+
+```{r}
+# mutate(finalfate = modify_if(.p=final_fate %in% c("A", "Hu"), .f=final_fate = newF))
+# ndDSR$newF = newF
+# ndDSR$finalF <- ifelse(ndDSR$final_fate )
+
+# which(ndDSR[ndDSR$nest == chNests1$nest],)
+# which(ndDSR$nest == chNests1$nest),
+# nests <- which(ndDSR$nest %in% chNests1$nest)
+# nestindex <- 
+# nestnums <- unique(ndDSR$nest[nests])
+# nestnums <- unique(nests)
+
+
+# ndDSR$finalf[nestindex] <- 
+# for(n in 1:length(nestindex)) ndDSR$finalf[nestindex[n]] = newnewF$newF[n]
+# for(n in 1:length(nestindex)) ifelse() ndDSR$finalf[nestindex[n]] = newnewF$newF[n]
+# 
+# x=1 
+# for(n in 1:length(ndDSR)) {
+#   
+#   if(n %in% nestindex  & !is.na(newnewF$newF[n])){
+#     
+#     ndDSR$finalf = newnewF$newF[x]
+#     x = x+1
+#       
+#   }
+#   else{
+#     
+#     ndDSR$finalf = ndDSR$final_fate
+#     
+#   }
+# }
+#----------------------------------------------------------------------------
+```
+
+
+```{r}
+# nestindex <- (ndDSR$nest %in% chNests1$nest)
+
+# ndDSR <- ndDSR %>% group_by(nest) %>% summarize(final_fate = last(final_fate),
+#                                                 i          = last(i),
+#                                                 j          = last(j),
+#                                                 k          = last(k),
+#                                                 status     = list(status),
+#                                                 finalf     = last(finalf))
+
+
+ndDSR$nestindex <- (ndDSR$nest %in% chNests1$nest) # index of C-H nests
+nests     <- chNests1$nest                         # numbers of C-H nests
+ndDSR$finalf <- vector(length = nrow(ndDSR))
+
+
+
+ndDSR$finalf[nestindex] <- newnewF$newF
+
+for(n in 1:nrow(ndDSR)){
+  
+  # if ndDSR$nestindex 
+  index = nestindex[n]
+  ndDSR$finalf[n] <- n
+  
+}
+
+for(n in 1:length(nests)){
+  
+  ndDSR$finalf[ndDSR$nest == nests[n]] = newnewF$newF[n]
+  
+}
+
+ndDSR$finalf[ndDSR$finalf == FALSE] = NA
+# ndDSR$finalf[is.na(ndDSR$finalf)] #= ndDSR$final_fate
+# ndDSR$finalf <- ifelse(is.na(ndDSR$finalf),
+                       # ndDSR$final_fate,
+                       # ndDSR$finalf)
+                       # 
+                       # 
+ndDSR1 <- ndDSR %>% mutate(finalf = ifelse(is.na(finalf),
+                                           final_fate,
+                                           finalf))
+ndDSR1 <- ndDSR1 %>%
+  filter(nestindex) %>% 
+  group_by(nest) %>% 
+  summarize(fate     = last(final_fate),
+            last_status   = last(status),
+            new_fate = last(as.character(finalf)),
+            k        = last(k),
+            ) # %>% 
+  #mutate_if(is.list, ~paste(unlist(.), collapse = ',')) # can't do this after ungrouping
+
+nd <- as.data.frame(ndDSR1)
+nd$notes <- chNests1$notes
+nd$final_obs <- chNests1$final_obs
+
+write.csv(nd, sprintf("output/aband_cattle_%s.csv",now))
+
+
+# for(n in 1:nrow(chNests1)){
+  # 
+# }
+```
+
+AND NOW DO IT FOR CAM NESTS! WOOOHOOOO
+
+```{r}
+# ndDSR$finalf[which(nestindex == T)] # this isn't the way to use indices
+  
+# # ndDSR2 <- ungroup(ndDSR)  
+# x=1
+# for(n in 1:nrow(ndDSR)) {
+#   #browser()
+#   if(n %in% nests){ # & !is.na(newnewF$newF[n])){
+#     # ndDSR$finalf <- newnewF$newF
+#     newfate  <- as.character(newnewF$newF[n])
+#     ndDSR$finalf <- newfate
+#     x = x+1
+#     cat("n = ", n, "|| new fate value:", newfate,  "|| x value:", x, "\n")
+#       
+#   }
+#   else{
+#     
+#     ndDSR$finalf = NA 
+#     
+#   }
+# }
+# 
+#   ndDSR$finalf[nestindex]
+# 
+# ndDSR$finalf[7]
+  # 
+  # ndDSR$finalf = ifelse(n %in% nestindex & !is.na(newnewF$newF[n]), 
+  #                       newnewF$newF[x], 
+  #                       ndDSR$final_fate[n])
+  # if(n %in% nestindex) x = x + 1
+  
+#}
+# ndDSR$finalf[nestindex] <- newnewF
+# ndDSR$finalf <- ifelse() 
+# ndDSR$finalf <- ifelse()
+
+
+
+# newNewF <- rbind(ndDSR$final_fate, newF=newF[ndDSR$final_fate])
+# ndDSR <- ndDSR %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+  # mutate(finalfate = ifelse(final_fate %in% c("A", "Hu") & !is.na(newF),
+                            # newF, 
+                            # final_fate))
+# 
+# check <- ndDSR %>%
+#   group_by(nest) %>%
+#   summarize(final_fate = last(final_fate),
+#             finalfate  = last(finalfate),
+#             status     = list(status))
+# 
+# which(ndDSR$finalfate != ndDSR$final_fate)
+# 
+# table(ndDSR$final_fate)
+
+# so I guess none of them changed? 
+
+```
+
+
+```{r}
+# ab <- c()
+# ds <- c()
+# 
+# ndDSR <- nestData %>% 
+#   mutate(final_fate = case_when(
+#     nest %in% ab & final_fate %in% c(5,6) ~ 4,
+#     nest %in% ds & final_fate %in% c(5,6) ~ 5
+#   ), 
+#   cam_fate = case_when(
+#     nest %in% ab & cam_fate %in% c(5,6) ~ 4,
+#     nest %in% ds & cam_fate %in% c(5,6) ~ 5
+#   ))
+```
+
+(Data formatting info from Darrah et al. 2018 supporting information app. S3)
+##read in nest data, which contains one row per observation per nest and the 
+# following columns:##
+#Nest.ID : factor with unique codes for each nest
+#Interval: length of nest check (exposure) interval
+#Status: nest status at each nest check. 1 = active, 2 = #depredated, 3 =  
+# flooded, 4 = abandoned, 5 = unknown cause #of failure
+#Veg.Cover: numeric column with cover categories 0-3
+#Habitat: factor column with habitat types
+#Exclosed: numeric column with 0 = no exclosure and 1 = #exclosure
+#Nest.Initiation: numeric column with Julian day of nest #initiation
+(end extract from Darrah et al. 2018)
+
+The first thing the Darrah script does is make an equivalent to "same_ID", so
+keep that column
+
+For the camera + field dataset, ...
+For the no-camera dataset, fates are as assigned in the field, and k =
+the last day the nest was observed in the field (as in the MARK data).
+
+```{r}
+
+ndDSRcam <- ndDSR %>% 
+  mutate(k      = fate_date, 
+         status = ifelse(lastObs == T, cam_fate, status)) %>%
+  select(nest, species, status, obs_int, i, j, k, cov_5m, nest_age, same_ID)
+
+ndDSR <- ndDSR %>%
+  filter(camera == FALSE) %>%
+  select(nest, species, status, obs_int, i, j, k, cov_5m, nest_age, same_ID)
+```
+
+Record the data for the Bayesian DSR model to csv:
+
+```{r}
+
+if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename <- paste0("model_data/nest_data_DSR_", now, ".csv")
+write.csv(ndDSR, filename)
+
+filename <- paste0("model_data/nest_data_DSR_cam_",now,".csv")
+write.csv(ndDSRcam, filename)
+
+```
+
+------------------------------------------------------------------------
+
+### Nest Fate Misclassification GLM
+
+Now, the data for the GLM. First, we will select only the cameras with
+nests, because the response variable is fate misclassification
+(difference between camera and field fate).
+
+We then reduce back to one row per nest by condensing the observation
+history to one cell,
+
+```{r}
+# filename <- "model_data/all_nest_data_GLM_0823_1555.csv"
+# ndGLM <- read_csv()
+
+nestData <- read_csv("nest_data/nest_data_cleaned_0830_722.csv",
+                     col_types = cols(.default="c"))
+now = format(Sys.time(), "%m%d_%H%M_")
+```
+
+
+```{r}
+ndGLM <- nestData %>% 
+  filter(camera == TRUE) %>% 
+  group_by(nest, site, species) %>%   
+  select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, cam_fate, status, year )%>%
+  summarize(status = list(status), 
+            across(where(is.integer), last),
+            across(where(is.numeric), last),
+            across(where(is.character), first)
+  ) %>%
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|'))
+
+table(ndGLM$species)
+table(ndGLM$site)
+table(ndGLM$year)
+ 
+```
+
+```{r}
+howMis <- function(fate, cfate){
+  case_when(
+    #fate == 0                  & cfate %in% c(2,3,4,5,6)     ~ "F", 
+    #fate == 0            & cfate == 1           ~ "M", # fail-unkn -> hatch
+    #fate == 0            & cfate %in% c(1:6)    ~ "M", # fail-unkn -> other
+    #fate == 7            & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    
+    fate %in% c(0:6)  & cfate != fate        ~ "M", # fate    -> other 
+    fate %in% c(7,8)  & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    fate %in% c(0:6)  & cfate == 7           ~ "U"  # unknown cam fate
+  )
+}
+```
+
+```{r}
+ndGLM <- ndGLM %>% 
+  mutate(hatchfail = case_when(
+    final_fate %in% c(0, 2:6) ~ 0, # fail
+    final_fate == 1           ~ 1, # hatch
+    final_fate == 7           ~ 7,
+    final_fate == 8           ~ 7,
+    final_fate == NA          ~ 7 # MAKE SURE all of these are coding correctly
+  ),
+  c_hatchfail = case_when(
+    cam_fate %in% c(0, 2:6) ~ 0,
+    cam_fate == 1           ~ 1,
+    cam_fate == 7           ~ 7,  # hopefully not many/any of either of these
+    #cam_fate == NA          ~ 7   # this one doesn't work - oh duh
+    is.na(cam_fate)         ~ 7
+    # remove cam_fate == 7?
+  )) %>%
+  mutate(HF_mis = case_when(
+    c_hatchfail == 7 | hatchfail == 7 ~NA,
+    c_hatchfail == hatchfail ~ 0, # nest wasn't misclassified
+    c_hatchfail != hatchfail ~ 1  # nest was misclassified
+  )) %>%
+  mutate(HF_mis = ifelse(c_hatchfail == 7, NA, HF_mis),
+         HF     = case_when(
+           hatchfail == 0 & c_hatchfail == 1 ~ 101,
+           hatchfail == 1 & c_hatchfail == 0 ~ 110
+         )) # camera H/F unknown
+  
+  
+```
+
+```{r}
+ndGLM <- ndGLM %>% 
+  mutate(misclass = case_when(
+    cam_fate == 7 ~ NA,
+    final_fate == cam_fate ~ 1, # nest wasn't misclassified
+    final_fate != cam_fate ~ 0   # nest was misclassified
+  ) ) %>%
+  mutate(how_mis = 
+           case_when(misclass==0                 ~ howMis(final_fate, cam_fate),
+                     misclass==1 & final_fate==7 ~ "U", 
+                     misclass==1 & final_fate!=7 ~ "C"))
+
+
+hmNA <- ndGLM$nest[which(is.na(ndGLM$how_mis))]
+
+fates <- ndGLM %>% 
+  select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fate_date)
+```
+
+```{r}
+
+ndGLM_ <- ndGLM
+camFateNA    <- ndGLM_$nest[which(is.na(ndGLM_$cam_fate))]  # 44 total
+fate_dateNA  <- ndGLM_$nest[which(is.na(ndGLM_$fate_date))] # 50 total
+is.na <- union(camFateNA, fate_dateNA)
+
+nest_ageNA   <- ndGLM_$nest[which(is.na(ndGLM_$nest_age))]  # 66 total
+is.na <- union(is.na, nest_ageNA) # 72 total nests to exclude-that's almost half
+
+wmNA  <- ndGLM_$nest[which(is.na(ndGLM_$HF_mis))] 
+is.na <- union(is.na, wmNA)
+
+numNA <- length(is.na)
+```
+
+```{r}
+
+# if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename4 <- paste0("model_data/all_nest_data_GLM_", now, ".csv")
+# will give error if "now" has not been created
+
+write.csv(ndGLM_, filename4, row.names = FALSE)
+```
+
+# 

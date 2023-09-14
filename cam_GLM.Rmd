@@ -1,6 +1,7 @@
 ---
 title: "CameraGLM"
 output:
+  pdf_document: default
   html_document: default
 date: "2023-08-30"
 editor_options:
@@ -11,6 +12,9 @@ editor_options:
 ```{r include=FALSE}
 remove(list=ls())
 while (!is.null(dev.list()))  dev.off()
+
+# to make PDFs, need LaTex installed 
+# install tinytex package, THEN run tinytex::install_tintytex()
 ```
 
 ```{r setup, include=FALSE}
@@ -163,40 +167,11 @@ table(ndGLM$year)
 ```{r}
 howMis <- function(fate, cfate){
   case_when(
-    #fate == 0                  & cfate %in% c(2,3,4,5,6)     ~ "F", 
-    #fate == 0            & cfate == 1           ~ "M", # fail-unkn -> hatch
-    #fate == 0            & cfate %in% c(1:6)    ~ "M", # fail-unkn -> other
-    #fate == 7            & cfate %in% c(0:6)    ~ "N", # unknown -> other
-    
     fate %in% c(0:6)  & cfate != fate        ~ "M", # fate    -> other 
     fate %in% c(7,8)  & cfate %in% c(0:6)    ~ "N", # unknown -> other
     fate %in% c(0:6)  & cfate == 7           ~ "U"  # unknown cam fate
   )
 }
-```
-
-```{r eval=FALSE, include=FALSE}
-# fail_mis <- function(fate, cfate){
-#   
-#   case_when(
-#     
-#     fate == 
-#     
-#   )
-#   
-# }
-# 
-# ndGLM <- ndGLM |> mutate(
-#   
-#   f_class = case_when(
-#     
-#     c_hatchfail == 1 ~ NA,
-#     c_hatchfail == 0
-#     
-#   )
-#   
-# )
-
 ```
 
 * Column for nest misclassification based on hatch or fail, not multiple
@@ -231,21 +206,6 @@ ndGLM <- ndGLM %>%
     c_hatchfail == hatchfail ~ 0, # nest wasn't misclassified
     c_hatchfail != hatchfail ~ 1  # nest was misclassified
   )) #%>%
-```
-
-
-```{r}
-# mutate(fate = ifelse(final_fate==8, 1, final_fate))
-# %>%
-#   mutate(HF_mis = ifelse(c_hatchfail == 7, NA, HF_mis),
-#          HF     = case_when(
-#            hatchfail == 0 & c_hatchfail == 1 ~ 101,
-#            hatchfail == 1 & c_hatchfail == 0 ~ 110
-#          )) # camera H/F unknown
-  
-
-# ndGLM <- ndGLM %>% 
-  
 ```
 
 ```{r message=FALSE}
@@ -310,16 +270,11 @@ ndGLM_ <- ndGLM_ |> mutate(
 ```{r}
 cat("Categorical predictor variables:\n")
 table(ndGLM_$species)
-# cat("\ntrue fate (according to camera footage)")
-# table(ndGLM_$cam_fate)
-# c<- ndGLM_ |>
 ndGLM_ |>
   group_by(cam_fate) |>
   summarize(freq=n()) |>
-  # as.numeric() |>
   mutate(across(c(cam_fate, freq), as.numeric)) |>
   t() |>
-  # mutate(across(c(cam_fate, freq), as.numeric())) |>
   prmatrix(collab=rep(" ",8))
 
 # cat("\n\nPossible response variables:")
@@ -355,23 +310,6 @@ ndGLM_ |>
 # 
 # 
 
-# obs <- table(ndGLM_$obs_int) |> as.data.frame(col.names=c("obs int", "freq")) #|> t() #|> as.numeric() |> print(row.names=FALSE)
-# as.data.frame(c("obs int", "count"),table(ndGLM_$obs_int))
-# as.data.frame(table(ndGLM_$obs_int), row.names=c("obs int", "count"))
-# as.data.frame(table(ndGLM_$obs_int), row.names=c("obs int", "count"))
-
-# count(ndGLM_, "obs_int")
-# ndGLM_ %>% count(obs_int) # makes a df
-# ndGLM_ %>% count(obs_int) %>% pivot_wider() knitr::kable()
-# ndGLM_ %>% count(obs_int) %>% pivot_wider() knitr::kable()
-# ndGLM_ %>% count(obs_int) %>% table()
-# ndGLM_ %>% group_by(obs_int) |> count(obs_int) %>% tabulate() # tabulate isn't expecting a table as input, but a vector
-# ndGLM_ %>% group_by(obs_int) %>% tabulate()
-# table(ndGLM$obs_int, row.names=c("obs.int", "frequency"))
-# table(ndGLM$obs_int, dnn=c("obs.int"))
-# table(cat("obs int"),ndGLM$obs_int)
-
-
 # for freq tables, frq function is one option
 # # but others make them look nicer
 
@@ -395,8 +333,6 @@ ndGLM_ |>
 # * MISSING DATA * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
 # ------------------------------------------------------------------------------
 
-# ndGLM_ <- ndGLM
-
 cat("All the missing values:\n\n")
 
 camFateNA    <- ndGLM_$nest[which(is.na(ndGLM_$cam_fate))]  # 44 total
@@ -416,9 +352,6 @@ allNA <- union(allNA, nest_ageNA) # 53 total nests to exclude-that's about a thi
 
 hmNA <- ndGLM$nest[which(is.na(ndGLM$how_mis))] # how can we reduce this number?
 
-# wmNA  <- ndGLM_$nest[which(is.na(ndGLM_$was_mis))] # add nests where was_mis == NA
-
-# allNA <- union(allNA, wmNA)
 numNA <- length(allNA) # 78 total now - now down to 70 on 20 aug
 
 NA201920 <- ndGLM_ %>% 
@@ -432,18 +365,11 @@ ndGLM_$numNA1920 <- length(NA201920$nest)
 # sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
 sapply(ndGLM_, function(x) sum(is.na(x)))
 
-
-
-```
-```{r}
-
 ```
 
 <!-- * Remove the NAs. -->
 
 ```{r echo=FALSE, message=FALSE}
-
-# what are the NAs for 
 
 ndGLM1 <- ndGLM_ %>% select(!status) # remove status (list of lists)
 #T/F vector of correct length (nrows)
@@ -455,14 +381,6 @@ fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c
 
 ndGLM1$obs_int[ndGLM1$obs_int > 15] = 4
 
-```
-
-<!-- Check how many nests are left -->
-
-```{r echo=FALSE}
-# table(ndGLM1$species)
-# table(ndGLM1$site)
-# table(ndGLM1$year)
 ```
 
 ```{r}
@@ -482,20 +400,16 @@ ndGLM2 <- ndGLM1[ndGLM1$year!="2021",] # data with 2021 removed - less than half
 ##### Frequency tables for vars in nest data, including 2021
 
 ```{r echo=FALSE}
-# cat("DATA INCLUDING 2021\n")
-# cat("\n\n\nCategorical predictor variables:\n")
 
 cat("Categorical predictor variables:\n")
 pre <- ndGLM_ |> tbl_summary(include=c(species, cam_fate),
                              label=list(species ~ "Species",
                                         cam_fate ~ "True fate (from camera)"))
 pre
-# cat("\ndate that fate was assigned")
-# table(ndGLM1$fate_date)
-# cat("\nnest age when fate assigned")
-# table(ndGLM1$nest_age)
-# cat("\nlength of final observation interval (days)")
-# table(ndGLM1$obs_int)
+
+# this is not a gt object, so it prints using kable and does not have formatting (in pdf)
+# actually, it IS a gt table, not sure why it doesn't print correctly
+# there is a website bookmarked that explains I think?
 
 cat("\n\nPossible response variables:")
 res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
@@ -509,6 +423,7 @@ res
 
 # for printing to console:
 
+# cat("DATA INCLUDING 2021\n")
 #cat("Categorical predictor variables:\n")
 # table(ndGLM1$species)
 # cat("\ntrue fate (according to camera footage)")
@@ -524,73 +439,64 @@ res
 
 #################################################################################
 
-# older:
-
-# table(ndGLM1$hatchfail)
-# table(ndGLM1$c_hatchfail)
-# table(ndGLM1$was_mis)
-# cat("\nwas nest assigned a fate in the field?")
-# table(ndGLM1$HF_mis)
-# cat("\nhow was the nest misclassified?")
-# table(ndGLM1$how_mis)
-
-# cat("\nhatch to fail:", sum(ndGLM1$HF==110, na.rm=T))
-# ndGLM1$HF==110
-# cat("\nfail to hatch:", sum(ndGLM1$HF == 101, na.rm=T))
-
-# sapply(ndGLM1, function(x) which(is.na(x))) # or do this by nest number
-# sapply(ndGLM1, function(x) sum(is.na(x)))
-# sapply(ndGLM1, function(x) which(is.na(x))) # or do this for each nest 
-
 fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis, k)
 ```
 
 ##### Excluding 2021
 
 ```{r echo=FALSE}
-# cat("DATA EXCLUDING 2021\n")
-# cat("\n\nNAs by variable:\n\n")
-# sapply(ndGLM2, function(x) sum(is.na(x)))
 
-##nestAgeNA <- ndGLM2$nest[which(is.na(ndGLM2$nest_age))]
-#fateDateNA <- ndGLM2$nest[which(is.na(ndGLM2$fate_date))]
-# 
-# ndGLM3<- ndGLM2 %>% filter(cam_fate == !is.na(cam_fate)) %>%
-#   mutate(true_fate = cam_fate[cam_fate!=7])
+# combined table, from stack exchange:
+
+# hp_table <- function(x){
+#     gt(x) %>% 
+#         data_color(columns="hp", 
+#                    colors=col_numeric(palette="Blues", c(0, 400))) %>% 
+#         tab_options(column_labels.hidden = TRUE) %>% 
+#         as_raw_html()
+# }
+# mtcars %>% 
+#     mutate(good_mpg = ifelse(mpg > 20, "Good mileage", "Bad mileage"), 
+#            car_name = row.names(.))  %>% 
+#     arrange(hp) %>% 
+#     group_by(relevel(factor(good_mpg), "Good mileage")) %>% 
+#     slice_head(n=5) %>% 
+#     select(car_name, hp) %>%
+#     group_map(~ hp_table(.x)) %>% 
+#     data.frame(.) %>% 
+#     setNames(., c("High mileage", "Low mileage")) %>% 
+#     gt() %>% 
+#     fmt_markdown(columns = TRUE)
+
+# but I just want to display side by side
+# might have to save them and then print using cowplot?
 
 cat("Categorical predictor variables:\n")
 pre <- ndGLM_ |> tbl_summary(include=c(species, cam_fate),
                              label=list(species ~ "Species",
                                         cam_fate ~ "True fate (from camera)"))
 pre
-# ndGLM2 <- ndGLM2 %>% 
-#   mutate(across(c(species, k, final_fate, how_mis, misclass), as.factor))
-# categorical vars are recoded as dummy vars 
-# to summarize the categorical predictors, use a frequency table:
-# dates (and age?) are interval-scaled data? or just continuous?
-# cat("\ndate that fate was assigned")
-# table(ndGLM2$fate_date)
-# # fate date appears fairly evenly distributed
-# cat("\nnest age when fate assigned")
-# table(ndGLM2$nest_age) # nest age is highly skewed to hatch age
-# # and hatch age should be 1:1 correlated w/ species
-# # if I happen to have more observations at those 2 ages, that biases things, right?
-# 
-# cat("\nlength of final observation interval (days)")
-# table(ndGLM2$obs_int)
 
 cat("\n\nPossible response variables:")
 res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
                              label=list(is_u ~ "Unknown in field",
                                         HF_mis ~ "Misclassified (H/F)",
-                                        misclass ~ "Misclassified (all fates)"))
+                                        misclass ~ "Misclassified (all fates)")) 
+# tbl_summary is not a gt object?
+
+  # as_latex()
 
 res
-
+# knitr::kable(list(pre, res))
+# need to add formatting first I think 
+# or in kable?
+knitr::kable(list(pre, res), format="latex") # this displays nothing
+# maybe would work in pdf output?
 #################################################################################
 
 # for printing to console:
 # 
+# cat("DATA EXCLUDING 2021\n")
 # cat("Categorical predictor variables:\n")
 # cat("\nspecies")
 # table(ndGLM2$species)
@@ -607,148 +513,12 @@ res
 
 #################################################################################
 
-# older:
-
-# cat("misclassified, hatch vs fail",table(ndGLM2$HF_mis)) # H/F misclassification
-# cat("\nwas nest assigned a fate in the field?")
-# cat("\nwas nest fate unknown in the field?")
-# table(ndGLM2$is_u)
-# cat("\nwas the nest misclassified in the field?")
-# table(ndGLM2$misclass) # any misclassification
-# cat("misclassified (hatch vs fail):  ")
-# table(ndGLM2$HF_mis) # H/F misclassification
-# cat("\nhow was the nest misclassified?")
-# table(ndGLM2$how_mis)
-# table(ndGLM2$hatchfail)
-# table(ndGLM2$c_hatchfail)
-# cat("\nhatch to fail:", sum(ndGLM2$HF==110, na.rm=T))
-# ndGLM1$HF==110
-# cat("\nfail to hatch:", sum(ndGLM2$HF == 101, na.rm=T))
 
 ```
 #####
 ----------------------------------------------------------------------
 
 ### \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
-
-----------------------------------------------------------------------
-
-#### Check for correlation amongst predictors
-
--   With and without 2021 data
-
-I don't think the p-values are adding anything, since there is no correlation?
-
-----------------------------------------------------------------------
-
-```{r}
-dat <- ndGLM1
-dat2 <- ndGLM2
-
-label_ <- function(y) max(dat[[y]]) * 0.8
-```
-
-##### Fate date vs obs int
-
-```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
-# ```{r echo=FALSE, warning=FALSE, out.width="75%"}
-
-# ggplot(dat, aes(x=fate_date, y=obs_int)) +
-ggplot(dat, aes(x=fdate, y=obs_int)) +
-  geom_point() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Including 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  # theme(plot.background = element_rect(color="deepskyblue3", linewidth=2, alpha=0.5))
-  # theme(plot.background = element_rect(color="#707070", linewidth=2 ))
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
-
-```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
-# ggplot(dat2, aes(x=fate_date, y=obs_int)) +
-ggplot(dat2, aes(x=fdate, y=obs_int)) +
-  geom_point() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Excluding 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  # theme(plot.background = element_rect(color="deepskyblue3", linewidth=2, alpha=0.5))
-  # theme(plot.background = element_rect(color="#707070", linewidth=2 ))
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
-
-----------------------------------------------------------------------
-
-##### Nest age vs fate date
-
-```{r echo=FALSE, fig.dim=c(6,4)}
-ggplot(dat, aes(x=nest_age, y=fdate)) +
-  # geom_point() +
-  geom_jitter() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Including 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$fdate), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
-
-```{r echo=FALSE, fig.dim=c(6,4)}
-ggplot(dat2, aes(x=nest_age, y=fdate)) +
-  # geom_point() +
-  geom_jitter() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Excluding 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$fdate), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-
-```
-
-----------------------------------------------------------------------
-
-##### Nest age vs obs int
-
-```{r echo=FALSE, fig.dim=c(6,4)}
-ggplot(dat, aes(x=nest_age, y=obs_int)) +
-  # geom_point() +
-  geom_jitter() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Including 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
-
-```{r echo=FALSE, fig.dim=c(6,4)}
-ggplot(dat2, aes(x=nest_age, y=obs_int)) +
-  geom_jitter() +
-  geom_smooth(formula=y~x,
-              method="lm") +
-  ggtitle("Excluding 2021") +
-  stat_regline_equation(formula=y~x,
-                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
-                        aes(label=..eq.label..)) + 
-  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
-  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-
-#  When is it OK to use jitter instead of point?
-```
 
 ----------------------------------------------------------------------
 
@@ -850,7 +620,6 @@ plot_var <- function(resp, dat, label1, label2){
   p4
 }
 ```
-
 ----------------------------------------------------------------------
 
 ##### First analysis: hatch/fail misclassification
@@ -901,6 +670,120 @@ plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 
 ```
 ####
+----------------------------------------------------------------------
+
+#### Check for correlation amongst predictors
+
+-   With and without 2021 data
+
+I don't think the p-values are adding anything, since there is no correlation?
+
+----------------------------------------------------------------------
+
+```{r}
+dat <- ndGLM1
+dat2 <- ndGLM2
+
+label_ <- function(y) max(dat[[y]]) * 0.8
+```
+
+##### Fate date vs obs int
+
+```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
+# ```{r echo=FALSE, warning=FALSE, out.width="75%"}
+
+ggplot(dat, aes(x=fdate, y=obs_int)) +
+  geom_point() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  # theme(plot.background = element_rect(color="deepskyblue3", linewidth=2, alpha=0.5))
+  # theme(plot.background = element_rect(color="#707070", linewidth=2 ))
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+```
+
+```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
+ggplot(dat2, aes(x=fdate, y=obs_int)) +
+  geom_point() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+```
+
+----------------------------------------------------------------------
+
+##### Nest age vs fate date
+
+```{r echo=FALSE, fig.dim=c(6,4)}
+ggplot(dat, aes(x=nest_age, y=fdate)) +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$fdate), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+```
+
+```{r echo=FALSE, fig.dim=c(6,4)}
+ggplot(dat2, aes(x=nest_age, y=fdate)) +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$fdate), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+
+```
+
+----------------------------------------------------------------------
+
+##### Nest age vs obs int
+
+```{r echo=FALSE, fig.dim=c(6,4)}
+ggplot(dat, aes(x=nest_age, y=obs_int)) +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Including 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+```
+
+```{r echo=FALSE, fig.dim=c(6,4)}
+ggplot(dat2, aes(x=nest_age, y=obs_int)) +
+  geom_jitter() +
+  geom_smooth(formula=y~x,
+              method="lm") +
+  ggtitle("Excluding 2021") +
+  stat_regline_equation(formula=y~x,
+                        label.y=0.8*max(dat$obs_int), # label.y = vertical position
+                        aes(label=..eq.label..)) + 
+  stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
+  theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
+
+#  When is it OK to use jitter instead of point?
+```
+
+
+
 ----------------------------------------------------------------------
 
 ### \* \* MODELS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*

@@ -4,19 +4,22 @@ author: "Sarah Bolinger"
 date: "2023-09-11"
 output: html_document
 ---
+```{r include=FALSE}
+remove(list=ls())
+while (!is.null(dev.list()))  dev.off()
+```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(stats)
+# library()
 ```
 
 ### Nest Fate Misclassification GLM
 
-Now, the data for the GLM. First, we will select only the cameras with
-nests, because the response variable is fate misclassification
-(difference between camera and field fate).
-
-We then reduce back to one row per nest by condensing the observation
-history to one cell,
+Now, we load the data for the GLM. 
 
 ```{r}
 # filename <- "model_data/all_nest_data_GLM_0823_1555.csv"
@@ -27,6 +30,10 @@ nestData <- read_csv("nest_data_cleaned_0906_0949_.csv",
 now = format(Sys.time(), "%m%d_%H%M_")
 ```
 
+First, we will select only the nests with cameras, because the response variable is fate misclassification (difference between camera and field fate).
+
+We then reduce back to one row per nest by condensing the observation
+history to one cell,
 
 ```{r}
 ndGLM <- nestData %>% 
@@ -41,6 +48,7 @@ ndGLM <- nestData %>%
   mutate_if(is.list, ~paste(unlist(.), collapse = '|'))
 
 table(ndGLM$species)
+# ndGLM <- ndGLM %>% count(species)
 table(ndGLM$site)
 table(ndGLM$year)
  

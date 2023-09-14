@@ -11,7 +11,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-R code for cleaning and formatting nest monitoring data for use in: 
+## R code for cleaning and formatting nest monitoring data for use in: 
 
 1.  Darrah (2018) Bayesian nest exposure model
 
@@ -26,7 +26,7 @@ steps along the way to view the data and make sure that a) the R code is
 behaving the way we expect and b) everything was entered accurately into
 the spreadsheet.
 
-Formatting:
+## Formatting:
 
 -   Audubon data has observation dates as columns and nests as rows
 
@@ -479,8 +479,7 @@ write.csv(nestdata, filename_) # new file
 ***
 
 ## Dealing with special cases ------------------------------------------------------
-
-Next up: more formatting! We need to deal with special observation
+### Next up: more formatting! We need to deal with special observation
 cases, such as:
 
 1.  Abandoned nests often have eggs in the last observation; we need to
@@ -506,7 +505,7 @@ nestData <- nestdata
 # just have to specify the type in the col_types argument
 ```
 
-### Check some nest data
+### Check some nest data if needed
 
 At any point in the process (until ~line 250, when the dataframe name changes),
 if you'd like to look at the row for a specific nest and compare it to e.g. the
@@ -565,7 +564,9 @@ for k, this will be NA.
 # nest needs to be integer bc we subtract nest numbers later
 nestData <- nestData %>% 
   mutate(across(c(i,j,k,nest,season_day,cov_1m,cov_5m), as.integer)) %>%
-  mutate(across(c(i,j,k), function(x) x-13)) %>% # convert to season-days
+  # mutate(across(c(i,j,k), function(x) x-13)) %>% # convert to season-days
+  mutate(across(c(i,j,k), function(x) x-10)) %>% # convert to season-days
+  # now it's -10 since I changed the sday function
   mutate(last_obs = k == season_day ) # is it the last observation of the nest?
 
 # is obs of same nest as prev row? 0 = yes; 1 = no
@@ -581,6 +582,8 @@ longObs <- which(nestData$obs_int > 6)         # which rows?
 noObsInt <- which(is.na(nestData$obs_int))
 
 ```
+
+### Estimating nest age
 
 Now we can calculate the nest initiation dates using either the
 estimated hatch date or, if not available, the actual hatch date (for
@@ -609,7 +612,12 @@ Finally, use the estimated initiation date to estimate nest age.
 ```{r}
 nestData$estHD     <- sday(nestData$estHD)
 nestData$fate_date <- sday(nestData$fate_date)
+# nestData$fdate     <- sday(nestData$k)
+#k has already been transformed
+```
 
+
+```{r}
 init <- function(date, species) {
   
   inc = case_when( species == "WIPL" ~ 28,
@@ -617,17 +625,38 @@ init <- function(date, species) {
                    species == "CONI" ~ 16 )
   return(date-inc) 
 }
+```
 
+
+```{r}
 nestData <- nestData %>%
   mutate(init_date = init(estHD, species)) %>%
-  mutate(final_obs = ifelse(last_obs==T, status, NA))%>%
+  mutate(final_obs = ifelse(last_obs==T, status, NA))
+initNA   <- unique( nestData$nest[which(is.na(nestData$init_date))]  )
+
+# nestData1 <- nestData %>%
+nestData <- nestData %>%
   mutate(init_date = ifelse(
-    final_fate=="H" & !is.na(fate_date) & is.na(init_date), 
-    init(fate_date, species),
+    # final_fate=="H" & !is.na(fate_date) & is.na(init_date), 
+    final_fate=="H" & !is.na(k) & is.na(init_date), 
+    init(k, species),
     init_date))
 
-nestData$nest_age <- nestData$fate_date - nestData$init_date
+initNA1   <- unique( nestData$nest[which(is.na(nestData$init_date))]  )
+kNA       <- unique(nestData$nest[which(is.na(nestData$k))])
+# fdateNA   <- unique(nestData1$nest[which(is.na(nestData1$fdate))])
+# why is this one so much longer than kNA?
+# table(nestData$k)
+
+# initNA1 <- initNA1 %>% filter(camera==T)
+
+# nestData$nest_age <- nestData$fate_date - nestData$init_date
+# nestData1$nest_age <- nestData1$k - nestData1$init_date
+nestData$nest_age <- nestData$k - nestData$init_date
+# ageNA1   <- unique( nestData1$nest[which(is.na(nestData1$nest_age))]  )
 ```
+
+### Special cases
 
 Now we can deal with all the aforementioned special cases at once,
 making sure the model doesn't mark abandoned nests with eggs as "alive"
@@ -639,6 +668,7 @@ observations past the "final observation" date as specified by k:
 3.  If observation date is past the value of k, status is NA
 4.  For everything else, use whatever value of status they already have.
 5.  "Not found" or similar does not necessarily mean failure. Sometimes nests were lost and then found on later surveys.
+
 ```{r}
 unique(nestData$status)
 notFound <- c("not locate", "not f", "nothing", "no activity", "not check", "not see", "not acc", "not obs", "DNL", "U", "unk", "?", "no stick", "stick missing")
@@ -666,7 +696,7 @@ lostN <- nestData %>%
 ```
 
 ```{r}
-nestData <- nestData %>%
+nestData1 <- nestData %>%
   # filter(!is.na(k)) %>%
   mutate(status = as.character(status)) %>%
   mutate(status = case_when( 
@@ -725,6 +755,8 @@ setdiff(lostnest, actN) # order matters!
 # make a thing to view all the statuses for nests with given fate
 ```
 
+### Convert observations and fates
+
 Then we will convert all the observation strings to a simpler format:
 nest is alive (TRUE) or not (FALSE).
 
@@ -736,7 +768,7 @@ nest active that day?"
 First, we need to determin which strings are classified as "alive"
 
 ```{r}
-statusStr <- unique(nestData$status)
+statusStr <- unique(nestData1$status)
 statusStr
 write(statusStr, sprintf("output/status_strings_after%s.txt", now))
 
@@ -753,22 +785,24 @@ We also need to do something with the unknown statuses from nests that were
 found again eventually (and still active)
 
 ```{r}
-nestData <- nestData %>% filter(!is.na(status))
+nestData1 <- nestData1 %>% filter(!is.na(status))
 # alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', '[Hh]atch', 'poops') 
 alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', 'hatch', 'poops') 
 
 dead  = c('F', "fail", "0E", "D", "W", "empty", "0e", "no activity", "coyote", "no chicks or parents", "nothing", "no activity")
 
-nestData <- nestData %>% 
+nestData1 <- nestData1 %>% 
   mutate( status = ifelse(status!="unknown", 
                           as.integer( status %in% alive ),
                           status
                           ))# %>%
   # group_by(nest) %>%
   # summarize(status = list(status))
+```
 
 
-nestStatus <- nestData %>% 
+```{r}
+nestStatus <- nestData1 %>% 
   group_by(nest) %>% 
   summarize(status = list(status), final_fate = last(final_fate))
 # nestStatus <- nestData %>% 
@@ -794,12 +828,21 @@ We can also see which of the NA-fate nests have cameras, and then see
 which nest R has marked as having a camera (and how many) in order to
 make sure all camera nests have been picked up.
 
+For now, we'll label U-H as its own category, and add D-A to D and F-A to F since we generally go with the first fate
+
 ```{r}
-nestData <- nestData %>% 
+table(nestData1$final_fate)
+table(nestData1$cam_fate)
+```
+
+```{r}
+nestData1 <- nestData1 %>% 
   mutate(final_fate = case_match(final_fate,
                                  "H"   ~ 1, 
                                  "F"   ~ 0, 
+                                 "F-A" ~ 0,
                                  "D"   ~ 2,
+                                 "D-A" ~ 2,
                                  "S"   ~ 3,
                                  "A"   ~ 4,
                                  "Hu"  ~ 5,
@@ -822,28 +865,39 @@ nestData <- nestData %>%
          camera = ifelse(camera=="Y"|camera=="y", TRUE, FALSE)
          
   )
-
-# fate_NA <- sum(is.na(nestData$final_fate))             # how many NA fate?
-fate_NA <- unique(nestData$nest[which(is.na(nestData$final_fate))])  # which nests?
-nestData$nest[which(nestData$camera == T & is.na(nestData$final_fate))] 
-
-nestData <- nestData[!is.na(nestData$final_fate),] # REMOVE NAs
-
-camNests <- unique(nestData$nest[which(nestData$camera == T)]) # cam nest IDs
-length(camNests) # how many nests with cameras, according to R?
 ```
+
+
+```{r}
+# fate_NA <- sum(is.na(nestData$final_fate))             # how many NA fate?
+fate_NA <- unique(nestData1$nest[which(is.na(nestData1$final_fate))])  # which nests?
+nestData1$nest[which(nestData1$camera == T & is.na(nestData1$final_fate))]
+```
+
+
+```{r}
+nestData1 <- nestData1[!is.na(nestData1$final_fate),] # REMOVE NAs
+```
+
+
+```{r}
+camNests <- unique(nestData1$nest[which(nestData1$camera == T)]) # cam nest IDs
+cat("number of camera nests:", length(camNests)) # how many nests with cameras, according to R?
+```
+
+### Filter and save.
 
 We can filter to the relevant sites and species, filter out 2021, and then see how many
 camera nests remain:
 
 ```{r}
-nestData_fil <- nestData %>% 
+nestData_fil <- nestData1 %>% 
   filter(site %in% c("RUTW", "RUTE")) %>%
   filter(species %in% c("CONI", "LETE")) %>%
   filter(year %in% c(2019,2020))
 
 camNests2 <- unique(nestData_fil$nest[which(nestData_fil$camera == TRUE)])
-length(camNests2) # how many camera nests once sites/species/years excluded?
+cat("camera nests after filtering:",length(camNests2)) # how many camera nests once sites/species/years excluded?
 ```
 
 If all looks correct, write the final cleaned and formatted datset
@@ -851,18 +905,21 @@ If all looks correct, write the final cleaned and formatted datset
 
 ```{r}
 # not going to remove 2021 yet
-nestData <- nestData %>% 
+nestData1 <- nestData1 %>% 
   filter(site %in% c("RUTW", "RUTE")) %>%
   filter(species %in% c("CONI", "LETE"))
 # now = "0830_722"
 if(file.exists("nest_data")==FALSE) dir.create("nest_data") 
 filename2 <- paste0("nest_data/nest_data_cleaned_",now,".csv")
-write.csv(nestData, filename2)
+write.csv(nestData1, filename2)
 # write.csv(nestData[-1], filename2)
 ```
 
+### Load the data again if necessary.
+
 We can also format the nest data further for use in the GLM and the
 Bayesian DSR model. First, load in the data and packages if necessary.
+
 ```{r}
 
  remove(list=ls())
@@ -928,6 +985,9 @@ as how many.
 # ndDSR <- nestData %>% mutate(final_fate=ifelse(final_fate == 8,7,final_fate))
 
 # make sure i,j,k values make sense:
+```
+
+```{r}
 # 
 ijk     <- nestData %>%
   filter(!is.na(k)) %>%
@@ -966,6 +1026,7 @@ goodNests <- checkNests %>%
   #filter(final == final_fate)
   #
 ```
+
 Remember the nest fate codes:
                                  "H"   ~ 1, 
                                  "F"   ~ 0, 
@@ -1031,10 +1092,6 @@ Check that everything was transformed the way we expected:
 
 
 ```
-
-
-
-------------------------------------------------------------------------
 
 ### Program MARK 
 
@@ -1104,8 +1161,6 @@ filename <- paste0("model_data/MARK_data_cam_",now,".csv")
 write.csv(ndMARKcam, filename)
 ```
 
-------------------------------------------------------------------------
-
 ### Bayesian logistic exposure model
 
 Unlike Program MARK, the Bayesian multinomial logistic DSR model allows us to include multiple causes of nest failure, like we coded for earlier. Now we can reformat the nest fates so that there are fewer categories, which should make DSR model interpretation easier.
@@ -1165,7 +1220,6 @@ chNests1 <- chNests1 %>%  select(nest, status, cam_fate, final_fate, final_obs, 
 dsKey <- c("destroyed", "crushed", "cracked", "trampled", "run over", "Ran over", "Stick broken")
 abKey <- c("cold", "abandoned", "getting eaten by ants", "loose egg")
 ```
-
 
 ```{r}
 # for(n in nrow(chNests1)) append(newF, str_extract(chNests1$NOTES[n], dsKey))
@@ -1259,7 +1313,6 @@ alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nes
 dead  = c('F', "fail", "0E", "D", "W", "empty", "0e", "no activity", "coyote", "no chicks or parents", "nothing", "no activity")
 ```
 
-
 ```{r}
 newF <- list() 
 
@@ -1331,8 +1384,6 @@ newnewF <- as.data.frame(cbind(nest, newF))
 # }
 #----------------------------------------------------------------------------
 ```
-
-
 ```{r}
 # nestindex <- (ndDSR$nest %in% chNests1$nest)
 
@@ -1342,13 +1393,12 @@ newnewF <- as.data.frame(cbind(nest, newF))
 #                                                 k          = last(k),
 #                                                 status     = list(status),
 #                                                 finalf     = last(finalf))
+```
 
-
+```{r}
 ndDSR$nestindex <- (ndDSR$nest %in% chNests1$nest) # index of C-H nests
 nests     <- chNests1$nest                         # numbers of C-H nests
 ndDSR$finalf <- vector(length = nrow(ndDSR))
-
-
 
 ndDSR$finalf[nestindex] <- newnewF$newF
 
@@ -1359,7 +1409,9 @@ for(n in 1:nrow(ndDSR)){
   ndDSR$finalf[n] <- n
   
 }
+```
 
+```{r}
 for(n in 1:length(nests)){
   
   ndDSR$finalf[ndDSR$nest == nests[n]] = newnewF$newF[n]
@@ -1458,8 +1510,6 @@ AND NOW DO IT FOR CAM NESTS! WOOOHOOOO
 # so I guess none of them changed? 
 
 ```
-
-
 ```{r}
 # ab <- c()
 # ds <- c()
@@ -1476,16 +1526,16 @@ AND NOW DO IT FOR CAM NESTS! WOOOHOOOO
 ```
 
 (Data formatting info from Darrah et al. 2018 supporting information app. S3)
-##read in nest data, which contains one row per observation per nest and the 
-# following columns:##
-#Nest.ID : factor with unique codes for each nest
-#Interval: length of nest check (exposure) interval
-#Status: nest status at each nest check. 1 = active, 2 = #depredated, 3 =  
-# flooded, 4 = abandoned, 5 = unknown cause #of failure
-#Veg.Cover: numeric column with cover categories 0-3
-#Habitat: factor column with habitat types
-#Exclosed: numeric column with 0 = no exclosure and 1 = #exclosure
-#Nest.Initiation: numeric column with Julian day of nest #initiation
+Read in nest data, which contains one row per observation per nest and the 
+following columns:##
+Nest.ID : factor with unique codes for each nest
+Interval: length of nest check (exposure) interval
+Status: nest status at each nest check. 1 = active, 2 = #depredated, 3 =  
+flooded, 4 = abandoned, 5 = unknown cause #of failure
+Veg.Cover: numeric column with cover categories 0-3
+Habitat: factor column with habitat types
+Exclosed: numeric column with 0 = no exclosure and 1 = #exclosure
+Nest.Initiation: numeric column with Julian day of nest #initiation
 (end extract from Darrah et al. 2018)
 
 The first thing the Darrah script does is make an equivalent to "same_ID", so

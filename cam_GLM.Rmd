@@ -15,6 +15,8 @@ while (!is.null(dev.list()))  dev.off()
 
 # to make PDFs, need LaTex installed 
 # install tinytex package, THEN run tinytex::install_tintytex()
+
+# Note that the horizontal lines help in the HTML output, but are overkill in pdf
 ```
 
 ```{r setup, include=FALSE}
@@ -52,11 +54,7 @@ library(cowplot)
 
 <!-- analysis of fates - put it in a table -->
 
-----------------------------------------------------------------------
-
 ### \* \* BACKGROUND \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
-
-----------------------------------------------------------------------
 
 This script sets up and runs a series of GLMs.
 
@@ -80,13 +78,7 @@ Run the models:
     -   create full, null, and nested models with explanations
     -   generate odds ratios and AIC table
 
-----------------------------------------------------------------------
-
 ### \* \* PREPARE THE DATA \* \* \* \* \* \* \* \* \* \* \* \* \*
-
-----------------------------------------------------------------------
-
-<!-- #### Steps: -->
 
 ##### Read in the data.
 
@@ -94,10 +86,11 @@ Run the models:
 
 # filename <- "model_data/all_nest_data_GLM_0906_0949_.csv"
 # ndGLM_   <- read_csv(filename )
-nestData <- read_csv("nest_data/nest_data_cleaned_0913_2056_.csv",
+nestData <- read_csv("nest_data/nest_data_cleaned_0915_0008_.csv",
                      col_types = cols(.default="c"))
+# now there are both numeric and character columns for final fate and cam fate
 
-now = format(Sys.time(), "%m%d_%H%M_")
+# now = format(Sys.time(), "%m%d_%H%M_")
 
 nestData <- nestData |> 
   mutate(fate = ifelse(final_fate==8, 1, final_fate))
@@ -120,7 +113,7 @@ history to one cell.
 ndGLM <- nestData %>% 
   filter(camera == TRUE) %>% 
   group_by(nest, site, species) %>%   
-  select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, fate, cam_fate, status, year )%>%
+  select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, fate, cam_fate, cfate, status, year )%>%
   summarize(status = list(status), 
             across(where(is.integer), last), # now they are all chr
             across(where(is.numeric), last),
@@ -142,8 +135,7 @@ ndGLM$k[ndGLM$nest==30959] = 81
 ndGLM$k[ndGLM$nest==20305] = 61
 ndGLM$k[ndGLM$nest==10242] = 40
 ndGLM$fdate <- ndGLM$k
-```
-```{r}
+
 ndGLM$nest_age[ndGLM$nest==10242] = 10
 ndGLM$nest_age[ndGLM$nest==20305] = 16
 ndGLM$nest_age[ndGLM$nest==30935] = 16
@@ -176,6 +168,8 @@ howMis <- function(fate, cfate){
 
 * Column for nest misclassification based on hatch or fail, not multiple
 failure causes.
+
+Where does unknown fate fit into this? In one paper, they had a third category, but could it just be misclassified?
 
 ```{r}
 ndGLM <- ndGLM %>% 
@@ -240,7 +234,7 @@ ndGLM <- ndGLM %>%
 
 ```{r message=FALSE}
 
-fates <- ndGLM %>% 
+fates2 <- ndGLM %>% 
   select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date)
 
 ```
@@ -262,7 +256,7 @@ ndGLM <- ndGLM |> mutate(is_u = isU(final_fate))
 ndGLM_ <- as.data.frame(ndGLM) # make into a regular df (not grouped)
 ndGLM_ <- ndGLM_ |> mutate(
   across(c(obs_int, fate_date, nest_age, cov_5m, fdate), as.numeric),
-  across(c(species, cam_fate, HF_mis, misclass, how_mis, is_u), as.factor)
+  across(c(species, cam_fate, cfate, HF_mis, misclass, how_mis, is_u), as.factor)
 )
 ```
 
@@ -385,7 +379,7 @@ ndGLM1$obs_int[ndGLM1$obs_int > 15] = 4
 
 ```{r}
 
-fates <- ndGLM1 %>% 
+fates3 <- ndGLM1 %>% 
   select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date, is_u)
 
 ```
@@ -399,26 +393,121 @@ ndGLM2 <- ndGLM1[ndGLM1$year!="2021",] # data with 2021 removed - less than half
 
 ##### Frequency tables for vars in nest data, including 2021
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE}
+# can add labels to the variables in the table, or beforehand via attr from labelled package
 
-cat("Categorical predictor variables:\n")
-pre <- ndGLM_ |> tbl_summary(include=c(species, cam_fate),
-                             label=list(species ~ "Species",
-                                        cam_fate ~ "True fate (from camera)"))
-pre
+# cat("Categorical predictor variables:\n")
+# pre <- ndGLM_ |> tbV3jl_summary(include=c(species, cam_fate),
+#                              label=list(species ~ "Species",
+#                                         cam_fate ~ "True fate (from camera)"))
+# pre
+# pFr <- ndGLM_ |>
+#   mutate(HF_mis   = HF_mis == 1,
+#          misclass = misclass == 1,
+#          is_u     = is_u == 1) |>
+#   select(HF_mis, misclass, is_u, species, cam_fate) |>
+#   tbl_strata(
+#     strata = 
+#   )
+  
+  
+  
+pre1 <- ndGLM_ |>
+  mutate(HF_mis = HF_mis == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=HF_mis,
+              include=c(species, cfate),
+              # value=list()
+              type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         # cam_fate ~ "True fate (from camera)")) |>
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**", 
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (H/F)**") |>
+  bold_labels()
+# pre1  
+# try using tbl_strata instead of merging 3 tables
+# I don't think it will work bc these are 3 different vars
+# unless I made them levels of a factor?
+pre2 <- ndGLM_ |>
+  mutate(misclass = misclass == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=misclass,
+              # include=c(species, cam_fate),
+              include=c(species, cfate),
+              # value=list()
+              type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**",
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (all fates)**") |>
+  bold_labels()
+# pre2
+pre3 <- ndGLM_ |>
+  mutate(is_u = is_u == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=is_u,
+              include=c(species, cfate),
+              # value=list()
+              # type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**", 
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Marked unknown in field**") |>
+  bold_labels()
+# pre3
 
-# this is not a gt object, so it prints using kable and does not have formatting (in pdf)
+pr <- tbl_merge(tbls=list(pre1,pre2,pre3),
+                tab_spanner = c("**Misclassified (H/F)**",
+                                "**Misclassified (all fates)**",
+                                "**Marked unknown**"))
+pr <- pr |> as_gt() |> 
+  cols_width(variable ~ px(250))
+  # cols_width(var_label ~ px(250),
+             # everything() ~ px(100) ) #|>
+  # cols_width(list(stub() ~ px(250),
+             # everything() ~ px(100) )) #|>
+  # cols_width(stub() ~ px(200))
+#Error in `check_vars_dt_boxhead()`:! The `var` value must be value in `dt_boxhead$var`.
+pr
+now = format(Sys.time(), "%m%d_%H%M_")
+# pr
+# pr |> gtsave(filename=sprintf("images/frtab_w2021_%s.png", now))
+filename <- sprintf("frtab_w2021_%s.png", now)
+# gtsave(pr, filename=sprintf("frtab_w2021_%s.png", now), path="images/")
+pr |> gtsave(filename=filename, path="images/")
+# requires webshot2 package
+# pr
+# why doesn't the merged table keep my spanning headers?
+
+# weird, bc the documentation says for dichotomous vars, only "TRUE" or "1" is shown 
+# but when it's 0/1 the table shows both, and when boolean it shows FALSE
+  # this is not a gt object, so it prints using kable and does not have formatting (in pdf)
 # actually, it IS a gt table, not sure why it doesn't print correctly
 # there is a website bookmarked that explains I think?
 
-cat("\n\nPossible response variables:")
-res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
-                             label=list(is_u ~ "Unknown in field",
-                                        HF_mis ~ "Misclassified (H/F)",
-                                        misclass ~ "Misclassified (all fates)"))
+# cat("\n\nPossible response variables:")
+# res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
+#                              label=list(is_u ~ "Unknown in field",
+#                                         HF_mis ~ "Misclassified (H/F)",
+#                                         misclass ~ "Misclassified (all fates)"))
+# 
+# res
 
-res
-
+# tbl_merge(tbls = list(pre, res),
+          # tab_spanner = c("Categorical predictors", "Response"))
 #################################################################################
 
 # for printing to console:
@@ -444,7 +533,7 @@ fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c
 
 ##### Excluding 2021
 
-```{r echo=FALSE}
+```{r echo=FALSE, message=FALSE}
 
 # combined table, from stack exchange:
 
@@ -490,8 +579,9 @@ res
 # knitr::kable(list(pre, res))
 # need to add formatting first I think 
 # or in kable?
-knitr::kable(list(pre, res), format="latex") # this displays nothing
+# knitr::kable(list(pre, res), format="latex") # this displays nothing
 # maybe would work in pdf output?
+# in pdf, creates weird table
 #################################################################################
 
 # for printing to console:
@@ -515,21 +605,15 @@ knitr::kable(list(pre, res), format="latex") # this displays nothing
 
 
 ```
-#####
-----------------------------------------------------------------------
 
 ### \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-----------------------------------------------------------------------
-
-#### Histograms
+#### HISTOGRAMS
 
 Plot the distributions of each continuous predictor with and without
 2021 data
 
 Make sure the bin sizes make sense
-
-----------------------------------------------------------------------
 
 ##### First, create a function that makes the plots.
 
@@ -620,7 +704,6 @@ plot_var <- function(resp, dat, label1, label2){
   p4
 }
 ```
-----------------------------------------------------------------------
 
 ##### First analysis: hatch/fail misclassification
 
@@ -633,8 +716,6 @@ plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 plot_var("HF_mis", ndGLM2, "Misclassified", "Correctly classified")
 ```
-
-----------------------------------------------------------------------
 
 ##### Second analysis: if failed, correct or not
 
@@ -649,8 +730,6 @@ ndGLM_f2 <- ndGLM2[ndGLM2$c_hatchfail != 1,]
 plot_var( "HF_mis", ndGLM2[ndGLM2$c_hatchfail != 1,], "Missclassified", "Correctly classified")
 ```
 
-----------------------------------------------------------------------
-
 ##### Third analysis: assigned vs unknown
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
@@ -661,24 +740,19 @@ plot_var("is_u", ndGLM1, "Unknown", "Assigned")
 plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 ```
 
-----------------------------------------------------------------------
-
 ##### Fourth analysis: if assigned, correct or not
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 
 
 ```
-####
-----------------------------------------------------------------------
 
-#### Check for correlation amongst predictors
+#### CORRELATION PLOTS
+* Check for correlation amongst predictors
 
 -   With and without 2021 data
 
 I don't think the p-values are adding anything, since there is no correlation?
-
-----------------------------------------------------------------------
 
 ```{r}
 dat <- ndGLM1
@@ -719,8 +793,6 @@ ggplot(dat2, aes(x=fdate, y=obs_int)) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
 ```
 
-----------------------------------------------------------------------
-
 ##### Nest age vs fate date
 
 ```{r echo=FALSE, fig.dim=c(6,4)}
@@ -749,8 +821,6 @@ ggplot(dat2, aes(x=nest_age, y=fdate)) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
 
 ```
-
-----------------------------------------------------------------------
 
 ##### Nest age vs obs int
 
@@ -784,15 +854,10 @@ ggplot(dat2, aes(x=nest_age, y=obs_int)) +
 
 
 
-----------------------------------------------------------------------
 
 ### \* \* MODELS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-----------------------------------------------------------------------
-
 #### FUNCTIONS
-
-----------------------------------------------------------------------
 
 Function to:
 
@@ -951,11 +1016,7 @@ save_tab <- function(tab){
 }
 ```
 
-----------------------------------------------------------------------
-
 #### PREPARE THE DATA
-
-----------------------------------------------------------------------
 
 Center the (numerical) predictor variables (don't scale, just center)
 
@@ -975,13 +1036,9 @@ ndGLM_scl2 <- ndGLM2 %>%
 
 ```
 
-----------------------------------------------------------------------
-
 #### QUESTION 1: How do the predictor vars affect H/F classification accuracy?
 
 -   Response: HF_mis
-
-----------------------------------------------------------------------
 
 <!-- *Does H/F misclassification make sense to analyze?* Presumably any type -->
 
@@ -1053,14 +1110,10 @@ Interaction models
 
 ```
 
-----------------------------------------------------------------------
-
 #### QUESTION 2: If nest has failed, what affects classification accuracy?
 
 -   Remove hatched nests
 -   Response: misclass
-
-----------------------------------------------------------------------
 
 ##### Initialize
 
@@ -1125,13 +1178,9 @@ Interaction models
 
 ```
 
-----------------------------------------------------------------------
-
 #### QUESTION 3: What affects whether nest is classifiable from field evidence?
 
 -   Response: is_u
-
-----------------------------------------------------------------------
 
 ##### Initialize
 
@@ -1218,14 +1267,10 @@ aicTab
 
 ```
 
-----------------------------------------------------------------------
-
 #### QUESTION 4: If marked unknown in field, what affects misclassification?
 
 -   Remove nests assigned to a fate in the field
 -   Response: misclass
-
-----------------------------------------------------------------------
 
 ##### Initialize
 

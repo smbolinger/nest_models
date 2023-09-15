@@ -831,12 +831,20 @@ make sure all camera nests have been picked up.
 For now, we'll label U-H as its own category, and add D-A to D and F-A to F since we generally go with the first fate
 
 ```{r}
-table(nestData1$final_fate)
-table(nestData1$cam_fate)
+# table(nestData1$final_fate) # these aren't right - still pivoted to long
+# table(nestData1$cam_fate)
+# nestData1 |> group_by(nest) |> tbl_summary(by=final_fate)
+
+# nestData1 |> group_by(nest) |> select(final_fate) |> summarize(nNest = n())
+# ^^this gives the number of observations of each nest^^
+# 
+nestData1 |> group_by(nest) |> select(final_fate) |> mutate(nNest = )
 ```
 
 ```{r}
 nestData1 <- nestData1 %>% 
+  mutate(ffate = final_fate,
+         cfate = cam_fate) %>%
   mutate(final_fate = case_match(final_fate,
                                  "H"   ~ 1, 
                                  "F"   ~ 0, 

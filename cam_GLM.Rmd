@@ -4,6 +4,8 @@ output:
   pdf_document: default
   html_document: default
 date: "2023-08-30"
+fig.width: 6
+fig.height: 4
 editor_options:
   markdown:
     wrap: 70
@@ -17,12 +19,22 @@ while (!is.null(dev.list()))  dev.off()
 # install tinytex package, THEN run tinytex::install_tintytex()
 
 # Note that the horizontal lines help in the HTML output, but are overkill in pdf
+# Also, in HTML the differences in the heading types are much more exaggerated
+# In PDF, the extra \n in the code blocks aren't needed, although they make the 
+# console output more readable in the script itself
+# don't actually want to squeeze a large png into a small image size?
+# but the table font size seems to scale with image size
 ```
 
 ```{r setup, include=FALSE}
 # setwd("C:/Users/sarah/Dropbox/Coursework/dissertation/ch1_analysis/")
 
-knitr::opts_chunk$set(echo = FALSE, tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+knitr::opts_chunk$set(echo = FALSE,
+                      # out.width = "1000px",
+                      fig.width = 6, # these should set the dims for knitr figs
+                      fig.height = 4,
+                      tidy.opts = list(width.cutoff = 60), 
+                      tidy = TRUE)
 
 # This script runs various GLMs using the camera fate data
 # I've included the code for the fate misclassification function for reference
@@ -51,10 +63,11 @@ library(cowplot)
 <!-- can do 2 separate analyses: H vs F and then take out H and look at -->
 
 <!-- classification of failure -->
+<!-- I'm still not totally sure what this second analysis would entail -->
 
 <!-- analysis of fates - put it in a table -->
 
-### \* \* BACKGROUND \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
+# \* \* BACKGROUND \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
 This script sets up and runs a series of GLMs.
 
@@ -78,9 +91,9 @@ Run the models:
     -   create full, null, and nested models with explanations
     -   generate odds ratios and AIC table
 
-### \* \* PREPARE THE DATA \* \* \* \* \* \* \* \* \* \* \* \* \*
+# \* \* PREPARE THE DATA \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-##### Read in the data.
+## Read in the data.
 
 ```{r include=FALSE}
 
@@ -97,7 +110,7 @@ nestData <- nestData |>
 
 ```
 
-##### Data wrangling
+## Data wrangling
 
 First, we will select only the nests with cameras, because the
 response variable is fate misclassification (difference between camera
@@ -152,7 +165,7 @@ table(ndGLM$year)
  
 ```
 
-##### Add columns and variables
+## Add columns and variables
 
 * Create functions to label nests as misclassified or not.
 
@@ -249,7 +262,7 @@ ndGLM <- ndGLM |> mutate(is_u = isU(final_fate))
 
 ```
 
-##### Examine data; find and remove missing values (NA).
+## Examine data; find and remove missing values (NA).
 
 * Ungroup dataframe and make categorical variables into factors; make sure other data classes are correct
 ```{r}
@@ -327,7 +340,6 @@ ndGLM_ |>
 # * MISSING DATA * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
 # ------------------------------------------------------------------------------
 
-cat("All the missing values:\n\n")
 
 camFateNA    <- ndGLM_$nest[which(is.na(ndGLM_$cam_fate))]  # 44 total
 fate_dateNA  <- ndGLM_$nest[which(is.na(ndGLM_$fate_date))] # 50 total
@@ -356,8 +368,11 @@ NA201920 <- ndGLM_ %>%
 ndGLM_$numNA <- numNA                     # export the counts as part of the data
 ndGLM_$numNA1920 <- length(NA201920$nest) 
 
+cat("All the missing values (with 2021):\n\n")
 # sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
 sapply(ndGLM_, function(x) sum(is.na(x)))
+cat("\n\nWithout 2021:\n\n")
+ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
 
 ```
 
@@ -380,7 +395,7 @@ ndGLM1$obs_int[ndGLM1$obs_int > 15] = 4
 ```{r}
 
 fates3 <- ndGLM1 %>% 
-  select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date, is_u)
+  select(nest, final_fate, cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date, is_u)
 
 ```
 
@@ -391,7 +406,7 @@ fates3 <- ndGLM1 %>%
 ndGLM2 <- ndGLM1[ndGLM1$year!="2021",] # data with 2021 removed - less than half
 ```
 
-##### Frequency tables for vars in nest data, including 2021
+## Frequency tables for vars in nest data, including 2021
 
 ```{r echo=FALSE, message=FALSE}
 # can add labels to the variables in the table, or beforehand via attr from labelled package
@@ -411,83 +426,98 @@ ndGLM2 <- ndGLM1[ndGLM1$year!="2021",] # data with 2021 removed - less than half
 #   )
   
   
-  
-pre1 <- ndGLM_ |>
-  mutate(HF_mis = HF_mis == 1) |>
-  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
-  # mutate(HF_mis = as.logical(HF_mis)) |>
-  tbl_summary(by=HF_mis,
-              include=c(species, cfate),
-              # value=list()
-              type=list(where(is.logical) ~ "categorical"), #doesn't work
-              # try converting to T/F earlier?
-              label=list(species ~ "Species",
-                         # cam_fate ~ "True fate (from camera)")) |>
-                         cfate ~ "Camera fate")) |>
-  modify_header(label ~ "**Variable**", 
-                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
-  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (H/F)**") |>
-  bold_labels()
-# pre1  
-# try using tbl_strata instead of merging 3 tables
-# I don't think it will work bc these are 3 different vars
-# unless I made them levels of a factor?
-pre2 <- ndGLM_ |>
-  mutate(misclass = misclass == 1) |>
-  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
-  # mutate(HF_mis = as.logical(HF_mis)) |>
-  tbl_summary(by=misclass,
-              # include=c(species, cam_fate),
-              include=c(species, cfate),
-              # value=list()
-              type=list(where(is.logical) ~ "categorical"), #doesn't work
-              # try converting to T/F earlier?
-              label=list(species ~ "Species",
-                         cfate ~ "Camera fate")) |>
-  modify_header(label ~ "**Variable**",
-                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
-  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (all fates)**") |>
-  bold_labels()
-# pre2
-pre3 <- ndGLM_ |>
-  mutate(is_u = is_u == 1) |>
-  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
-  # mutate(HF_mis = as.logical(HF_mis)) |>
-  tbl_summary(by=is_u,
-              include=c(species, cfate),
-              # value=list()
-              # type=list(where(is.logical) ~ "categorical"), #doesn't work
-              # try converting to T/F earlier?
-              label=list(species ~ "Species",
-                         cfate ~ "Camera fate")) |>
-  modify_header(label ~ "**Variable**", 
-                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
-  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**Marked unknown in field**") |>
-  bold_labels()
-# pre3
+fr_tab <- function(data){
+  # data <- ndGLM2
+  # data$year
+  #   ifelse(
+  #   "2021" %in% data$year,
+  #   "inc2021",
+  #   "no2021"
+  # )
 
-pr <- tbl_merge(tbls=list(pre1,pre2,pre3),
-                tab_spanner = c("**Misclassified (H/F)**",
-                                "**Misclassified (all fates)**",
-                                "**Marked unknown**"))
-pr <- pr |> as_gt() |> 
-  cols_width(variable ~ px(250))
-  # cols_width(var_label ~ px(250),
-             # everything() ~ px(100) ) #|>
-  # cols_width(list(stub() ~ px(250),
-             # everything() ~ px(100) )) #|>
-  # cols_width(stub() ~ px(200))
-#Error in `check_vars_dt_boxhead()`:! The `var` value must be value in `dt_boxhead$var`.
-pr
-now = format(Sys.time(), "%m%d_%H%M_")
-# pr
-# pr |> gtsave(filename=sprintf("images/frtab_w2021_%s.png", now))
-filename <- sprintf("frtab_w2021_%s.png", now)
-# gtsave(pr, filename=sprintf("frtab_w2021_%s.png", now), path="images/")
-pr |> gtsave(filename=filename, path="images/")
+  pre1 <- data |>
+    
+    mutate(HF_mis = HF_mis == 1) |>                            # response var # 1
+    
+    # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+    # mutate(HF_mis = as.logical(HF_mis)) |>
+    tbl_summary(by=HF_mis,
+                include=c(species, cfate),
+                # value=list()
+                type=list(where(is.logical) ~ "categorical"), #doesn't work
+                # try converting to T/F earlier?
+                label=list(species ~ "Species",
+                           # cam_fate ~ "True fate (from camera)")) |>
+                           cfate ~ "Camera fate")) |>
+    modify_header(label ~ "**Variable**", 
+                  all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+    # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+    modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (H/F)**") |>
+    bold_labels()
+  # pre1  
+  # try using tbl_strata instead of merging 3 tables
+  # I don't think it will work bc these are 3 different vars
+  # unless I made them levels of a factor?
+  pre2 <- data |>
+    mutate(misclass = misclass == 1) |>                       # response var # 2
+    
+    # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+    # mutate(HF_mis = as.logical(HF_mis)) |>
+    tbl_summary(by=misclass,
+                # include=c(species, cam_fate),
+                include=c(species, cfate),
+                # value=list()
+                type=list(where(is.logical) ~ "categorical"), #doesn't work
+                # try converting to T/F earlier?
+                label=list(species ~ "Species",
+                           cfate ~ "Camera fate")) |>
+    modify_header(label ~ "**Variable**",
+                  all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+    # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+    modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (all fates)**") |>
+    bold_labels()
+  # pre2
+  pre3 <- data |>
+    mutate(is_u = is_u == 1) |>                                # response var # 3
+    
+    # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+    # mutate(HF_mis = as.logical(HF_mis)) |>
+    tbl_summary(by=is_u,
+                include=c(species, cfate),
+                # value=list()
+                # type=list(where(is.logical) ~ "categorical"), #doesn't work
+                # try converting to T/F earlier?
+                label=list(species ~ "Species",
+                           cfate ~ "Camera fate")) |>
+    modify_header(label ~ "**Variable**", 
+                  all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+    # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+    modify_spanning_header(c("stat_1", "stat_2") ~ "**Marked unknown in field**") |>
+    bold_labels()
+  # pre3
+  
+  pr <- tbl_merge(tbls=list(pre1,pre2,pre3),
+                  tab_spanner = c("**Misclassified (H/F)**",
+                                  "**Misclassified (all fates)**",
+                                  "**Marked unknown**"))
+  pr <- pr |> as_gt() |> 
+    cols_width(variable ~ px(250))
+  pr
+  now = format(Sys.time(), "%m%d_%H%M_")
+  # pr
+  # pr |> gtsave(filename=sprintf("images/frtab_w2021_%s.png", now))
+  filename <- ifelse(
+    "2021" %in% data$year,
+    sprintf("images/frtab_inc2021_%s.png", now),
+    sprintf("images/frtab_no2021_%s.png", now)
+  )
+  # filename <- sprintf("frtab_w2021_%s.png", now)
+  # gtsave(pr, filename=sprintf("frtab_w2021_%s.png", now), path="images/")
+  pr |> gtsave(filename=filename, path="analysis/")
+  
+  return(filename)
+}
+knitr::include_graphics("analysis/frtab_w2021_0915_0955_.png")
 # requires webshot2 package
 # pr
 # why doesn't the merged table keep my spanning headers?
@@ -531,57 +561,84 @@ pr |> gtsave(filename=filename, path="images/")
 fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis, k)
 ```
 
-##### Excluding 2021
+## Excluding 2021
 
 ```{r echo=FALSE, message=FALSE}
 
-# combined table, from stack exchange:
 
-# hp_table <- function(x){
-#     gt(x) %>% 
-#         data_color(columns="hp", 
-#                    colors=col_numeric(palette="Blues", c(0, 400))) %>% 
-#         tab_options(column_labels.hidden = TRUE) %>% 
-#         as_raw_html()
-# }
-# mtcars %>% 
-#     mutate(good_mpg = ifelse(mpg > 20, "Good mileage", "Bad mileage"), 
-#            car_name = row.names(.))  %>% 
-#     arrange(hp) %>% 
-#     group_by(relevel(factor(good_mpg), "Good mileage")) %>% 
-#     slice_head(n=5) %>% 
-#     select(car_name, hp) %>%
-#     group_map(~ hp_table(.x)) %>% 
-#     data.frame(.) %>% 
-#     setNames(., c("High mileage", "Low mileage")) %>% 
-#     gt() %>% 
-#     fmt_markdown(columns = TRUE)
+pre1 <- ndGLM2 |>
+  mutate(HF_mis = HF_mis == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=HF_mis,
+              include=c(species, cfate),
+              # value=list()
+              type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         # cam_fate ~ "True fate (from camera)")) |>
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**", 
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (H/F)**") |>
+  bold_labels()
+# pre1  
+# try using tbl_strata instead of merging 3 tables
+# I don't think it will work bc these are 3 different vars
+# unless I made them levels of a factor?
+pre2 <- ndGLM2 |>
+  mutate(misclass = misclass == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=misclass,
+              # include=c(species, cam_fate),
+              include=c(species, cfate),
+              # value=list()
+              type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**",
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Nest misclassified (all fates)**") |>
+  bold_labels()
+# pre2
+pre3 <- ndGLM2 |>
+  mutate(is_u = is_u == 1) |>
+  # mutate(across(c(HF_mis, misclass, is_u), as.logical)) |>
+  # mutate(HF_mis = as.logical(HF_mis)) |>
+  tbl_summary(by=is_u,
+              include=c(species, cfate),
+              # value=list()
+              # type=list(where(is.logical) ~ "categorical"), #doesn't work
+              # try converting to T/F earlier?
+              label=list(species ~ "Species",
+                         cfate ~ "Camera fate")) |>
+  modify_header(label ~ "**Variable**", 
+                all_stat_cols() ~ "**{level}**<br>(N={n})") |>
+  # modify_spanning_header(c("stat_1", "stat_2") ~ "**Was nest misclassified (H/F)?") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Marked unknown in field**") |>
+  bold_labels()
+# pre3
 
-# but I just want to display side by side
-# might have to save them and then print using cowplot?
+pr <- tbl_merge(tbls=list(pre1,pre2,pre3),
+                tab_spanner = c("**Misclassified (H/F)**",
+                                "**Misclassified (all fates)**",
+                                "**Marked unknown**"))
 
-cat("Categorical predictor variables:\n")
-pre <- ndGLM_ |> tbl_summary(include=c(species, cam_fate),
-                             label=list(species ~ "Species",
-                                        cam_fate ~ "True fate (from camera)"))
-pre
+pr <- pr |> as_gt() |> 
+  cols_width(variable ~ px(250))
+pr
+now = format(Sys.time(), "%m%d_%H%M_")
+# pr
+# pr |> gtsave(filename=sprintf("images/frtab_w2021_%s.png", now))
+filename <- sprintf("frtab_no2021_%s.png", now)
+# gtsave(pr, filename=sprintf("frtab_w2021_%s.png", now), path="images/")
+pr |> gtsave(filename=filename, path="analysis/")
 
-cat("\n\nPossible response variables:")
-res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
-                             label=list(is_u ~ "Unknown in field",
-                                        HF_mis ~ "Misclassified (H/F)",
-                                        misclass ~ "Misclassified (all fates)")) 
-# tbl_summary is not a gt object?
-
-  # as_latex()
-
-res
-# knitr::kable(list(pre, res))
-# need to add formatting first I think 
-# or in kable?
-# knitr::kable(list(pre, res), format="latex") # this displays nothing
-# maybe would work in pdf output?
-# in pdf, creates weird table
+knitr::include_graphics("analysis/frtab_no2021_0915_1039_.png")
 #################################################################################
 
 # for printing to console:
@@ -606,16 +663,14 @@ res
 
 ```
 
-### \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
+# \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-#### HISTOGRAMS
+## HISTOGRAMS
 
 Plot the distributions of each continuous predictor with and without
-2021 data
+2021 data. Make sure the bin sizes make sense.
 
-Make sure the bin sizes make sense
-
-##### First, create a function that makes the plots.
+### First, create a function that makes the plots.
 
 -   Can change response variable / data for the plot without having to
     copy-paste and edit
@@ -705,9 +760,9 @@ plot_var <- function(resp, dat, label1, label2){
 }
 ```
 
-##### First analysis: hatch/fail misclassification
+### First analysis: hatch/fail misclassification  
 
--   Ends up with NAs for nests w/ unknown fate in the field
+-   Ends up with NAs for nests w/ unknown fate in the field  
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
@@ -717,7 +772,8 @@ plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
 plot_var("HF_mis", ndGLM2, "Misclassified", "Correctly classified")
 ```
 
-##### Second analysis: if failed, correct or not
+### Second analysis: if failed, correct or not    
+
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 ndGLM_f <- ndGLM1[ndGLM1$c_hatchfail != 1,]
@@ -730,7 +786,7 @@ ndGLM_f2 <- ndGLM2[ndGLM2$c_hatchfail != 1,]
 plot_var( "HF_mis", ndGLM2[ndGLM2$c_hatchfail != 1,], "Missclassified", "Correctly classified")
 ```
 
-##### Third analysis: assigned vs unknown
+### Third analysis: assigned vs unknown  
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 plot_var("is_u", ndGLM1, "Unknown", "Assigned")
@@ -740,17 +796,17 @@ plot_var("is_u", ndGLM1, "Unknown", "Assigned")
 plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 ```
 
-##### Fourth analysis: if assigned, correct or not
+### Fourth analysis: if assigned, correct or not  
 
 ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 
 
 ```
 
-#### CORRELATION PLOTS
+## CORRELATION PLOTS
 * Check for correlation amongst predictors
 
--   With and without 2021 data
+-   With and without 2021 data  
 
 I don't think the p-values are adding anything, since there is no correlation?
 
@@ -761,7 +817,7 @@ dat2 <- ndGLM2
 label_ <- function(y) max(dat[[y]]) * 0.8
 ```
 
-##### Fate date vs obs int
+### Fate date vs obs int  
 
 ```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
 # ```{r echo=FALSE, warning=FALSE, out.width="75%"}
@@ -793,7 +849,7 @@ ggplot(dat2, aes(x=fdate, y=obs_int)) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
 ```
 
-##### Nest age vs fate date
+### Nest age vs fate date  
 
 ```{r echo=FALSE, fig.dim=c(6,4)}
 ggplot(dat, aes(x=nest_age, y=fdate)) +
@@ -822,7 +878,7 @@ ggplot(dat2, aes(x=nest_age, y=fdate)) +
 
 ```
 
-##### Nest age vs obs int
+### Nest age vs obs int  
 
 ```{r echo=FALSE, fig.dim=c(6,4)}
 ggplot(dat, aes(x=nest_age, y=obs_int)) +
@@ -855,14 +911,12 @@ ggplot(dat2, aes(x=nest_age, y=obs_int)) +
 
 
 
-### \* \* MODELS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
+# \* \* MODELS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-#### FUNCTIONS
+## FUNCTIONS
 
-Function to:
-
--   make a univariate model from each predictor variable
--   print the summaries of all univariate models
+Make a univariate model from each predictor variable.  
+Print the summaries of all univariate models  
 
 (should I add ANOVA for each as well?)
 
@@ -870,6 +924,7 @@ Function to:
 univar_mod <- function(resp, modData ){
   
   vars <- c("species", "nest_age", "cam_fate", "fdate", "obs_int")
+  # vars <- c("species", "nest_age", "cfate", "fdate", "obs_int")
   umod_ <- list()
   for(v in seq_along(vars)){
     f <- paste0(resp," ~ ", vars[v])
@@ -886,7 +941,7 @@ univar_mod <- function(resp, modData ){
 }
 ```
 
-And a function that compares any 2 different models
+Compare coefficients of any 2 different models  
 
 ```{r include=FALSE}
 # mod_diff <- function(mod1, mod2){
@@ -896,7 +951,7 @@ mod_diff <- function(mNull, mAlt){ # argument order matters - names should help
   
   # cat("\npercent difference in model coefficients (vs full model):\n")
   # cat("\n---------------------------------------------------------------")
-  cat("Percent difference in model coefficients (vs full model):\n\n")
+  cat("\n\nPercent difference in model coefficients (vs full model):\n\n")
   cat(names(coef(mNull))[-difVList], "\n")
   cat((abs(coef(mAlt)-coef(mNull)[-difVList]) / coef(mNull)[-difVList]))
   # cat("\n---------------------------------------------------------------\n")
@@ -905,7 +960,7 @@ mod_diff <- function(mNull, mAlt){ # argument order matters - names should help
 
 ```
 
-Function to generate odds ratios
+Generate odds ratios  
 
 ```{r include=FALSE}
 odd_rat <- function(mods){
@@ -920,7 +975,7 @@ odd_rat <- function(mods){
 }
 ```
 
-Functions for AIC and BIC
+Calculate AIC and BIC  
 
 ```{r include=FALSE}
 dp <- function(x) deparse(x, width.cutoff=150)
@@ -940,12 +995,18 @@ bic_mod <- function(mods){
               locations = cells_body())
   return(BICtab)
 }
+```
 
+```{r include=FALSE}
 aic_mod <- function(mods){
   
-  modEQ <- paste(sapply(modsC,  
-                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
+  # mods <- modsF
+  # mods[[1]]$call 
+  modEQ <- paste(sapply(mods,  
+                        # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
+                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
                         ), sep = " ")
+  # modEQ
   nestAIC <- aictab(cand.set = mods, modnames = modEQ, sort = T)
 
   AICtab <- gt(nestAIC) |> 
@@ -957,7 +1018,7 @@ aic_mod <- function(mods){
 }
 ```
 
-Functions to create combo AIC/BIC tables
+Create combo AIC/BIC tables  
 
 ```{r include=FALSE}
 delta_tab <- function(nestAIC, nestBIC){
@@ -997,26 +1058,24 @@ full_tab <- function(nestAIC, nestBIC){
 #as_word(BICtab) # output I don't know how to use
 ```
 
-```{r}
-# aic_tab <- function(nAIC){
-#   
-#   aTab <- nAIC |> select(c(Modnames, K_1, AICc_1, AICcWt_1, LL_2))
-#   aTab <- aTab |> 
-  
-
-```
-
-Function to save tables to file
+Save tables to file  
 
 ```{r include=FALSE}
+nm       <- function(x) substitute(x)
 save_tab <- function(tab){
   now = format(Sys.time(), "%m%d_%H%M")
-  file_name <- paste0(names(tab)[1], "aicbic_", now, ".rtf")
+  # file_name <- paste0(names(tab)[1], "aicbic_", now, ".rtf")
+
+  file_name <- paste0(nm(tab), now, ".rtf") 
   gtsave(tab, file_name, path="analysis/")
+  
+  file_name1 <- paste0(nm(tab), now, ".png")
+  gtsave(tab, file_name1, path="analysis/")
+  return(file_name1)
 }
 ```
 
-#### PREPARE THE DATA
+## PREPARE THE DATA  
 
 Center the (numerical) predictor variables (don't scale, just center)
 
@@ -1036,7 +1095,7 @@ ndGLM_scl2 <- ndGLM2 %>%
 
 ```
 
-#### QUESTION 1: How do the predictor vars affect H/F classification accuracy?
+## QUESTION 1: How do the predictor vars affect H/F classification accuracy?
 
 -   Response: HF_mis
 
@@ -1045,28 +1104,94 @@ ndGLM_scl2 <- ndGLM2 %>%
 <!-- of failure is more similar to other types of failure than to hatch? this -->
 
 <!-- seems to be the assumption in papers like Andes (2018) -->
+### Including 2021 data
 
-##### Initialize
-
-Choose the data and response var, create list to store models
+#### Initialize - Choose the data and response var, create list to store models.
 
 ```{r}
-modsHF <- list()
-resp   <- "HF_mis"
+resp    <- "HF_mis"
 dataMod <- ndGLM_scl1
+modsHF  <- list()
 ```
 
-##### Univariate models
+#### Univariate models
 
-```{r include=FALSE}
-HF_inc2021 <- univar_mod("HF_mis", ndGLM_scl1)
-# HF_inc2021
+```{r echo=FALSE}
+HF_inc2021 <- univar_mod(resp, dataMod)
+HF_inc2021
+```
+
+
+#### Multivariate models
+
+
+1. Null and full models
+
+```{r echo=FALSE, warning=FALSE}
+modsHF[[1]] <- glm(as.formula(paste0(
+  resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
+  # resp,"~ species + nest_age + cfate + fdate + obs_int")), 
+  data=dataMod, family=binomial) # "fitted probabilities..." warning
+
+modsHF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+
+cat("\n\n")
+anova(modsHF[[1]], modsHF[[2]], test="LRT")
+mod_diff(modsHF[[1]], modsHF[[2]])
+
+```
+
+2. Other models
+
+```{r echo=FALSE}
+modsHF[[3]] <- glm(as.formula(paste0(
+  resp,"~ fdate")),
+  data=dataMod, family=binomial)
+cat("\n\nCompare to full model:\n\n")
+anova(modsHF[[1]], modsHF[[3]], test="LRT")
+mod_diff(modsHF[[1]], modsHF[[3]])
+cat("\nCompare to null model:\n\n")
+anova(modsHF[[2]], modsHF[[3]], test="LRT")
+```
+
+```{r echo=FALSE}
+
+```
+
+3. Interaction models
+
+```{r echo=FALSE}
+
+```
+
+4. Analysis
+
+```{r echo=FALSE}
+aicHF <- aic_mod(modsHF)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename))
+```
+
+### Excluding 2021 data
+
+#### Initialize - Choose the data and response var, create list to store models.
+
+```{r}
+resp    <- "HF_mis"
+dataMod <- ndGLM_scl2
+modsHF  <- list()
+```
+
+#### Univariate models
+
+```{r echo=FALSE}
 HF_no2021  <- univar_mod("HF_mis", ndGLM_scl2)
+HF_no2021
 ```
 
-##### Multivariate models
+#### Multivariate models
 
-Null and full models
+1. Null and full models
 
 ```{r echo=FALSE, warning=FALSE}
 modsHF[[1]] <- glm(as.formula(paste0(
@@ -1080,61 +1205,65 @@ anova(modsHF[[1]], modsHF[[2]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[2]])
 
 ```
-
-Other models
+2. Other models
 
 ```{r echo=FALSE}
-# modsHF[[3]] <- glm(as.formula(paste0(
-#   resp,"~ ")),
-#   data=dataMod, family=binomial) 
-
+modsHF[[3]] <- glm(as.formula(paste0(
+  resp,"~ fdate")),
+  data=dataMod, family=binomial)
+cat("\n\nCompare to full model:\n\n")
+anova(modsHF[[1]], modsHF[[3]], test="LRT")
+mod_diff(modsHF[[1]], modsHF[[3]])
+cat("\nCompare to null model:\n\n")
+anova(modsHF[[2]], modsHF[[3]], test="LRT")
 ```
 
 ```{r echo=FALSE}
 
 ```
 
-```{r echo=FALSE}
-
-```
-
-Interaction models
+3. Interaction models
 
 ```{r echo=FALSE}
 
 ```
 
-##### Analysis
+4. Analysis
 
-```{r echo=FALSE}
-
+```{r echo=FALSE, message=FALSE}
+aicHF <- aic_mod(modsHF)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename))
 ```
 
-#### QUESTION 2: If nest has failed, what affects classification accuracy?
+## QUESTION 2: If nest has failed, what affects classification accuracy?
 
 -   Remove hatched nests
 -   Response: misclass
 
-##### Initialize
+### Including 2021 data
+
+#### Initialize
 
 Choose the data and response var, create list to store models
 
 ```{r echo=FALSE}
 modsF   <- list()
-resp    <- "HF_mis"
+resp    <- "misclass"
 dataMod <- ndGLM_scl1[ndGLM_scl1$final_fate!=1,]
 ```
 
-##### Univariate models
+#### Univariate models
 
-```{r include=FALSE}
+```{r echo=FALSE}
 F_inc2021 <- univar_mod(resp, dataMod)
 F_inc2021
+# dataMod |> select()
 ```
 
-##### Multivariate models
+#### Multivariate models
 
-Null and full models
+1. Null and full models
 
 ```{r echo=FALSE}
 modsF[[1]] <- glm(as.formula(paste0(
@@ -1144,18 +1273,21 @@ modsF[[1]] <- glm(as.formula(paste0(
 modsF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
 cat("\n\n")
-anova(modsHF[[1]], modsHF[[2]], test="LRT")
-mod_diff(modsHF[[1]], modsHF[[2]])
+anova(modsF[[1]], modsF[[2]], test="LRT")
+mod_diff(modsF[[1]], modsF[[2]])
 
 ```
 
-Other models
+2. Other models
 
 ```{r echo=FALSE}
-# modsHF[[3]] <- glm(as.formula(paste0(
-#   resp,"~ ")), 
-#   data=dataMod, family=binomial) # "fitted probabilities..." warning
+modsF[[3]] <- glm(as.formula(paste0(
+  resp,"~ obs_int")),
+  data=dataMod, family=binomial) # "fitted probabilities..." warning
 
+anova(modsF[[1]], modsF[[3]], test="LRT")
+
+mod_diff(modsF[[1]], modsF[[3]])
 ```
 
 ```{r echo=FALSE}
@@ -1166,7 +1298,7 @@ Other models
 
 ```
 
-Interaction models
+3. Interaction models
 
 ```{r echo=FALSE}
 
@@ -1175,14 +1307,107 @@ Interaction models
 ##### Analysis
 
 ```{r echo=FALSE}
+aicF <- aic_mod(modsF)
+filename <- save_tab(aicF)
+
+knitr::include_graphics(paste0("analysis/", filename))
+```
+
+
+### Excluding 2021 data
+
+
+#### Initialize
+
+Choose the data and response var, create list to store models
+
+```{r echo=FALSE}
+modsF   <- list()
+resp    <- "misclass"
+dataMod <- ndGLM_scl2[ndGLM_scl2$final_fate!=1,]
+```
+
+#### Univariate models
+
+```{r echo=FALSE}
+u <- univar_mod(resp, dataMod)
+u
+```
+
+#### Multivariate models
+
+1. Null and full models
+
+```{r echo=FALSE}
+modsF[[1]] <- glm(as.formula(paste0(
+  resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
+  data=dataMod, family=binomial) # "fitted probabilities..." warning
+
+modsF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+
+cat("\n\n")
+anova(modsF[[1]], modsF[[2]], test="LRT")
+mod_diff(modsF[[1]], modsF[[2]])
 
 ```
 
-#### QUESTION 3: What affects whether nest is classifiable from field evidence?
+2. Other models
+
+```{r echo=FALSE}
+modsF[[3]] <- glm(as.formula(paste0(
+  resp, "~ obs_int + fdate"
+)), data=dataMod, family=binomial)
+
+cat("\n\n")
+anova(modsF[[1]], modsF[[3]], test="LRT")
+mod_diff(modsF[[1]], modsF[[3]])
+```
+```{r echo=FALSE}
+modsF[[4]] <- glm(as.formula(paste0(
+  resp, "~ obs_int + fdate + nest_age"
+)), data=dataMod, family=binomial)
+
+anova(modsF[[1]], modsF[[4]], test="LRT")
+mod_diff(modsF[[1]], modsF[[4]])
+```
+
+
+```{r echo=FALSE}
+
+```
+
+```{r echo=FALSE}
+
+```
+
+3. Interaction models
+
+```{r echo=FALSE}
+modsF[[5]] <- glm(as.formula(paste0(
+  resp, "~ obs_int * fdate"
+)), data=dataMod, family=binomial)
+
+anova(modsF[[1]], modsF[[5]], test="LRT")
+mod_diff(modsF[[1]], modsF[[5]])
+```
+
+#### Analysis
+
+```{r echo=FALSE}
+aicF <- aic_mod(modsF)
+filename <- save_tab(aicF)
+
+knitr::include_graphics(paste0("analysis/", filename))
+```
+
+
+## QUESTION 3: What affects whether nest is classifiable from field evidence?
 
 -   Response: is_u
 
-##### Initialize
+### Including 2021 data
+
+#### Initialize
 
 Choose the data and response var, create list to store models
 
@@ -1192,16 +1417,16 @@ resp    <- "is_u"
 dataMod <- ndGLM_scl1
 ```
 
-##### Univariate models
+#### Univariate models
 
-```{r include=FALSE}
+```{r echo=FALSE}
 C_inc2021 <- univar_mod(resp, dataMod)
-# C_inc2021                               # show summaries
+C_inc2021                               # show summaries
 ```
 
-##### Models
+#### Models
 
-Null and full models
+1. Null and full models
 
 ```{r echo=FALSE}
 modsC[[1]] <- glm(as.formula(paste0(
@@ -1216,12 +1441,13 @@ anova(modsC[[1]], modsC[[2]], test="LRT")
 
 ```
 
-Other models
+2. Other models
 
 ```{r echo=FALSE}
 # significant or close to significant in univariate models
 modsC[[3]] <- glm(as.formula(paste0(
-  resp, "~ species + nest_age"
+  # resp, "~ species + nest_age"
+  resp, "~ nest_age"
 )), data=dataMod, family=binomial)
 cat("\n*** compare to full model ***\n\n")
 anova(modsC[[1]], modsC[[3]], test="LRT")
@@ -1235,7 +1461,9 @@ anova(modsC[[2]], modsC[[3]], test="LRT")
 ```{r echo=FALSE}
 # add next most significant variable
 modsC[[4]] <- glm(as.formula(paste0(
-  resp, "~ species + nest_age + obs_int"
+  # resp, "~ species + nest_age + obs_int"
+  # resp, "~ species + nest_age + fdate"
+  resp, "~ species + nest_age"
 )), data=dataMod, family=binomial)
 
 anova(modsC[[1]], modsC[[4]], test="LRT")
@@ -1248,31 +1476,110 @@ anova(modsC[[2]], modsC[[4]], test="LRT")
 ```{r echo=FALSE}
 # and next
 modsC[[5]] <- glm(as.formula(paste0(
-  resp, "~ species + nest_age + fdate + obs_int"
+  resp, "~ species + nest_age + fdate"
 )), data=dataMod, family=binomial)
 
 anova(modsC[[1]], modsC[[5]], test="LRT")
 mod_diff(modsC[[1]], modsC[[5]])
 
-anova(modsC[[2]], modsC[[5]], test="LRT")
+# anova(modsC[[2]], modsC[[5]], test="LRT")
 # mod_diff(modsC[[2]], modsC[[5]])
 ```
 
-##### Analysis
+```{r}
+
+modsC[[6]] <- glm(as.formula(paste0(
+  resp, "~ species + nest_age + fdate + obs_int"
+)), data=dataMod, family=binomial)
+
+anova(modsC[[1]], modsC[[6]], test="LRT")
+mod_diff(modsC[[1]], modsC[[6]])
+```
+
+3. Interaction models
+
+4. Analysis
 
 ```{r echo=FALSE}
 oddRat <- odd_rat(modsC)
 aicTab <- aic_mod(modsC)
-aicTab
+# aicTab
+
+filename <- save_tab(aicTab)
+
+knitr::include_graphics(paste0("analysis/", filename))
 
 ```
 
-#### QUESTION 4: If marked unknown in field, what affects misclassification?
+### Excluding 2021 data
+
+#### Initialize
+
+Choose the data and response var, create list to store models
+
+```{r echo=FALSE}
+modsC2   <- list()
+resp    <- "is_u"
+dataMod <- ndGLM_scl2
+```
+
+#### Univariate models
+
+```{r echo=FALSE}
+C_no2021 <- univar_mod(resp, dataMod)
+C_no2021                               # show summaries
+```
+
+#### Models
+
+1. Null and full models
+
+```{r echo=FALSE}
+modsC2[[1]] <- glm(as.formula(paste0(
+  resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
+  data=dataMod, family=binomial) # "fitted probabilities..." warning
+
+modsC2[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+
+cat("\n\n")
+anova(modsC2[[1]], modsC2[[2]], test="LRT")
+# mod_diff(modsC[[1]], modsC[[2]])
+
+```
+
+2. Other models
+
+```{r}
+modsC2[[3]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age"
+)), data=dataMod, family=binomial)
+
+anova(modsC2[[1]], modsC2[[3]], test="LRT")
+mod_diff(modsC2[[1]], modsC2[[3]])
+
+```
+
+3. Interaction models
+
+4. Analysis
+
+```{r}
+
+aicC <- aic_mod(modsC2) # modsC definitely has 3 items, so why 5 names?
+fn <- save_tab(aicC)
+
+knitr::include_graphics(paste0("analysis/", fn))
+```
+
+## QUESTION 4: If marked unknown in field, what affects misclassification?
 
 -   Remove nests assigned to a fate in the field
 -   Response: misclass
 
-##### Initialize
+### Including 2021 data
+
+#### Initialize
 
 Choose the data and response var, create list to store models
 
@@ -1284,23 +1591,81 @@ dataMod <- ndGLM_scl1[ndGLM_scl1$final_fate %in% c(7,8),]
 # this can't be correct, because all U nests were mis-assigned
 ```
 
-##### Univariate models
+#### Univariate models
 
-```{r include=FALSE}
+```{r echo=FALSE}
 U_inc2021 <- univar_mod(resp,dataMod)
 U_inc2021                             # show summaries
 # U_no2021
 ```
 
-##### Models
+#### Models
 
-Null and full models
+1. Null and full models
+
+Using only "U" fate means cam_fate doesn't have all its levels
+
+```{r echo=FALSE}
+
+modsU[[1]] <- glm(as.formula(paste0(
+  resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
+  data=dataMod, family=binomial) # "fitted probabilities..." warning
+
+modsU[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+
+cat("\n\n")
+anova(modsU[[1]], modsU[[2]], test="LRT")
+```
+
+2. Other models
+
+```{r echo=FALSE}
+modsU[[3]] <- glm(as.formula(paste0(
+  resp, "~ fdate + obs_int"
+)), data=dataMod, family=binomial)
+
+anova(modsU[[1]], modsU[[3]], test="LRT")
+
+mod_diff(modsU[[1]], modsU[[3]])
+```
+
+#### Analysis
 
 ```{r echo=FALSE}
 
 ```
 
-Other models
+### Excluding 2021 data
+
+#### Initialize
+
+Choose the data and response var, create list to store models
+
+```{r echo=FALSE}
+modsU <- list()
+resp = "misclass"
+dataMod <- ndGLM_scl2[ndGLM_scl2$final_fate %in% c(7,8),]
+
+# this can't be correct, because all U nests were mis-assigned
+```
+
+#### Univariate models
+
+```{r include=FALSE}
+U_no2021 <- univar_mod(resp,dataMod)
+U_no2021                             # show summaries
+# U_no2021
+```
+
+#### Models
+
+1. Null and full models
+
+```{r echo=FALSE}
+
+```
+
+2. Other models
 
 ```{r echo=FALSE}
 
@@ -1311,6 +1676,11 @@ Other models
 ```{r echo=FALSE}
 
 ```
+
+
+
+
+
 
 ----------------------------------------------------------------------
 

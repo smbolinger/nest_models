@@ -80,9 +80,10 @@ numbers the same length)
 
 ```{r}
 # #filename <- 'nestdata2017_SMD.csv'
-filename21 <- '2021_nests_3.csv'
-filename20 <- '2020_nests_3.csv'
-filename19 <- '2019_nests_3.csv'
+# filename21 <- '2021_nests_3.csv'
+filename21 <- '2021_nests_.csv'
+filename20 <- '2020_nests_.csv'
+filename19 <- '2019_nests_.csv'
 
 # there is a more elegant way to do this with dplyr, but oh well
 # make all vars character so that bind_rows() will work
@@ -312,7 +313,10 @@ I don't see the NAs it says are there in cols 75, 77
 also don't know where the extra 7 obs excluded come from.
 
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
-strings <- c("[0-9][:LETTER:]", "[Bb][Oo][Nn]", "\bH\b", "[Hh]atch", "Hu", "chick behavior", "nest behavior", "wet chick", "pipping", "poops", "[Ff]ail", "\bF\b", "\bW\b", "\bD\b", "depredated", "coyote", "no stick", "stick missing", "not locate", "DNF", "DNL", "not f", "not [Cc]heck", "Didn't check", "not see", "not acc", "not obs", "\bU\b", "unk", "\\?", "empty", "no activity", "nothing", "no chicks or parents")
+
+now = format(Sys.time(), "%m%d_%H%M_")
+
+strings <- c("[0-9][:LETTER:]", "[Bb][Oo][Nn]", "\\bH\\b", "[Hh]atch", "Hu", "chick behavior", "nest behavior", "wet chick", "pipping", "poops", "[Ff]ail", "\\bF\\b", "\\bW\\b", "\\bD\\b", "D", "depredated", "coyote", "no stick", "stick missing", "not locate", "DNF", "DNL", "not f", "not [Cc]heck", "Didn't check", "not see", "not acc", "not obs", "\\bU\\b", "unk", "\\?", "empty", "no activity", "nothing", "no chicks or parents")
 # strings <- c("^[0-9][:LETTER:]", "[Bb][Oo][Nn]", "[Hh]atch", "chick behavior", "nest behavior", "pipping", "empty, poops", "[Ff]ail", "D", "depredated", "coyote", "not locate", "DNF", "DNL", "not f", "not check", "not see", "not acc", "not obs", "[Uu]", "\\?", "empty", "no activity", "nothing")
 
 # "D(?!N)", "depredated", "coyote", "no stick", "stick missing", "not locate", "DNF", "DNL", "not f", "not [Cc]heck", "Didn'
@@ -495,7 +499,7 @@ cases, such as:
 First, load the data from the previous section if applicable :
 
 ```{r}
-nestData <- read_csv('nest_data/nest_data_combined_0829_1539_.csv',
+nestData <- read_csv('nest_data/nest_data_combined_0918_1118_.csv',
                      col_types = cols(.default="c"))
 
 nestData <- nestdata
@@ -843,7 +847,7 @@ nestData1 |> group_by(nest) |> select(final_fate) |> mutate(nNest = )
 
 ```{r}
 nestData1 <- nestData1 %>% 
-  mutate(ffate = final_fate,
+  mutate(ffate = final_fate, # create 2 vars that remained coded as letters
          cfate = cam_fate) %>%
   mutate(final_fate = case_match(final_fate,
                                  "H"   ~ 1, 

@@ -1232,11 +1232,18 @@ modsHF  <- list()
 
 ### Univariate models
 
-Is it better to have unreliable parameter estimates, or split the variable into fewer categories that are less informative, or just exclude the variable all together?
+
 
 ```{r echo=FALSE}
 # HF_inc2021 <- univar_mod(resp, dataMod, modsum)
 HF_inc2021 <- univar_mod(resp, dataMod)
+HF_inc2021[1]
+```
+
+The output table below shows that some fate categories have ridiculous SE/confidence intervals. I already merged cattle into human impacts. I could merge more categories, but the question is: 
+Is it better to have unreliable parameter estimates, or split the variable into fewer categories that are less informative, or just exclude the variable all together?
+
+```{r echo=FALSE}
 HF_inc2021[2]
 # vars <- dataMod |> select(c("species", "nest_age", "cam_fate", "fdate", "obs_int"))
 ```

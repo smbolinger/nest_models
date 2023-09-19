@@ -802,6 +802,9 @@ nestData1 <- nestData1 %>%
                           ))# %>%
   # group_by(nest) %>%
   # summarize(status = list(status))
+  # 
+unique(nestData1$final_fate)
+unique(nestData1$cam_fate)
 ```
 
 
@@ -856,12 +859,16 @@ nestData1 <- nestData1 %>%
                                  "D"   ~ 2,
                                  "D-A" ~ 2,
                                  "S"   ~ 3,
+                                 "W"   ~ 3,
                                  "A"   ~ 4,
                                  "Hu"  ~ 5,
                                  "Ca"  ~ 6,
                                  "U"   ~ 7,
                                  "U?"  ~ 7,
-                                 "U-H" ~ 8
+                                 "U-H" ~ 8,
+                                 "U-F" ~ 9,
+                                 "U-A" ~ 9,
+                                 "U-D" ~ 9
          ),
          
          cam_fate = case_match(cam_fate,
@@ -872,13 +879,18 @@ nestData1 <- nestData1 %>%
                                "A"  ~ 4,
                                "Hu" ~ 5,
                                "Ca" ~ 6,
-                               "U"  ~ 7
+                               "U"  ~ 7#,
+                               # NA   ~ 7
          ), 
          camera = ifelse(camera=="Y"|camera=="y", TRUE, FALSE)
          
   )
+
+unique(nestData1$final_fate)
+unique(nestData1$cam_fate)
 ```
 
+### Check some things.
 
 ```{r}
 # fate_NA <- sum(is.na(nestData$final_fate))             # how many NA fate?
@@ -917,12 +929,13 @@ If all looks correct, write the final cleaned and formatted datset
 
 ```{r}
 # not going to remove 2021 yet
-nestData1 <- nestData1 %>% 
-  filter(site %in% c("RUTW", "RUTE")) %>%
-  filter(species %in% c("CONI", "LETE"))
+# nestData2 <- nestData1 %>% 
+  # filter(site %in% c("RUTW", "RUTE")) %>%
+  # filter(species %in% c("CONI", "LETE"))
 # now = "0830_722"
 if(file.exists("nest_data")==FALSE) dir.create("nest_data") 
 filename2 <- paste0("nest_data/nest_data_cleaned_",now,".csv")
+# write.csv(nestData2, filename2)
 write.csv(nestData1, filename2)
 # write.csv(nestData[-1], filename2)
 ```

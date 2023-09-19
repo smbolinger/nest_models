@@ -28,7 +28,7 @@ while (!is.null(dev.list()))  dev.off()
 # don't actually want to squeeze a large png into a small image size?
 # but the table font size seems to scale with image size
 # changing the dpi argument in knitr::include_graphics is the only thing that worked to change image output size
-
+# always turn off chunks before commenting out code or deleting
 # Also remember that comments in the text sections have open and close characters
 ```
 
@@ -996,7 +996,7 @@ univar_mod <- function(resp, modData ){ # not sure how to return one or the othe
 
 # modData <- ndGLM1
 # resp    <- "HF_mis"
-  
+  # browser()
   modtab <- modData |> 
   # select(c("misclass","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
   # select(paste(nm(resp), c("species", "nest_age", "cam_fate", "fdate", "obs_int"))) |>
@@ -1017,7 +1017,15 @@ univar_mod <- function(resp, modData ){ # not sure how to return one or the othe
   #     select(formula, coefficients, )
   #   
   # }
+  # modtab <- gt(modtab) # not working
+  modtab <- as_gt(modtab)
+  # Error in UseMethod("group_vars") : 
+  # no applicable method for 'group_vars' applied to an object of class
+  #  "c('tbl_uvregression', 'gtsummary')"
+  
   modinfo = list(modsum, modtab)
+  # modinfo = list(modsum, as.gt(modtab))
+  # modinfo = list(modsum, gt(modtab))
   return(modinfo )
 }
 # nm(resp)
@@ -1027,20 +1035,42 @@ Compare coefficients of any 2 different models
 
 ```{r include=FALSE}
 # mod_diff <- function(mod1, mod2){
-mod_diff <- function(mFull, mAlt){ # argument order matters - names should help
+
+# maybe eventually add the argument for the print statement, if time
+# could use "full" as default value and only change for the interaction models
+
+# mod_diff <- function(mFull, mAlt, modtype){ # argument order matters - names should help
+mod_diff <- function(mFull, mAlt, modtype){ # argument order matters - names should help
   
   difVList <- which(!(names(coef(mFull))) %in% names(coef(mAlt)))
   
   # cat("\npercent difference in model coefficients (vs full model):\n")
   # cat("\n---------------------------------------------------------------")
   # cat("\n\nPercent difference in model coefficients (vs full model):\n\n") # for printing to the console
-  cat("Compare to full model:\n\n")
-anova(mFull, mAlt, test="LRT")
-  cat("\nPercent difference in model coefficients (vs full model):\n\n")
+
+  # cat("Compare to full model:\n\n")
+  comp <- anova(mFull, mAlt, test="LRT")
+  # cat("Compare to full model:\n\n", comp)
+  # **argument 1 (type 'list') cannot be handled by 'cat'**
+  # # try cat(unlist(x))
+  # cat(sprintf("Compare to %s model:\n\n"), modtype)
+  cat("Compare to full or main effects model:\n\n")
+  print(comp)
+  # for(i in 1:length(comp)) cat(comp[i])
+  # for(i in 1:length(comp)) rende(comp[i])
+  # cat("Compare to full model:\n\n", unlist(paste(comp, sep=" "))) # this doesn't have the nice formatting
+  # comp
+  # cat(sprintf("\n\nPercent difference in model coefficients (vs %s model):\n\n"), modtype)
+  # difff <- names(coef(mFull))[-difVList] # don't store the names
+  # cat("\n\nPercent difference in model coefficients (vs full model):\n\n", difff)
+  cat("\n\nPercent difference in model coefficients (vs full or main effects model):\n\n")
   cat(names(coef(mFull))[-difVList], "\n")
-  # cat((abs(coef(mAlt)-coef(mFull)[-difVList]) / coef(mFull)[-difVList])) #
+  cat((abs(coef(mAlt)-coef(mFull)[-difVList]) / coef(mFull)[-difVList])) #
   cat("\n---------------------------------------------------------------")
+  # cat("\nCompare to null model:\n\n")
+  # anova(mNull, mAlt, test="LRT") # add an mNull variable
   
+  # return(list(comp, difff)) # I don't think I need these for anything
 }
 
 ```
@@ -1221,6 +1251,8 @@ Response: HF_mis
 
 ## Including 2021 data
 
+For this first model, I have included all the output, but for subsequent models I have included only a table summary of the univariate models and an AIC table for all models evaluated. I can easily have R print all the output for all models if something warrants further attention.
+
 ### Initialize - Choose the data and response var, create list to store models.
 
 ```{r}
@@ -1230,21 +1262,30 @@ dataMod <- ndGLM_scl1
 modsHF  <- list()
 ```
 
-### Univariate models
+### Step 1: Univariate models
 
+Analyze the relationship between each predictor variable and the response variable when the other variables are not accounted for. The output can be used in different ways depending on how you choose to do variable selection. 
 
+The output table below shows that some categories in the camera fate predictor have ridiculous SE/confidence intervals. I think they have too few observations. I already merged cattle into human impacts, and I could merge more categories, but the question is: 
+Is it better to have unreliable parameter estimates, or split the variable into fewer categories that are less informative, or just exclude the variable altogether?
 
-```{r echo=FALSE}
+```{r echo=FALSE, warning=FALSE}
 # HF_inc2021 <- univar_mod(resp, dataMod, modsum)
-HF_inc2021 <- univar_mod(resp, dataMod)
-HF_inc2021[1]
+u_inc2021 <- univar_mod(resp, dataMod)
+u_inc2021[1]
+# HF_inc2021[1] # this is giving weird output as HTML
+# filename <- save_tab(u_inc2021[2])
+tab <- u_inc2021[[2]]
+filename <- save_tab(tab)
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
+
 ```
 
-The output table below shows that some fate categories have ridiculous SE/confidence intervals. I already merged cattle into human impacts. I could merge more categories, but the question is: 
-Is it better to have unreliable parameter estimates, or split the variable into fewer categories that are less informative, or just exclude the variable all together?
+
 
 ```{r echo=FALSE}
-HF_inc2021[2]
+# HF_inc2021[2]
 # vars <- dataMod |> select(c("species", "nest_age", "cam_fate", "fdate", "obs_int"))
 ```
 
@@ -1281,7 +1322,22 @@ dataMod |>
 # HF2021
 ```
 
-### Multivariate models
+### Step 2: Multivariate models
+
+Method: First, I created the null and full models.  
+
+To select variables, I opted to start with the variables with significant p-values with an arbitrary cutoff of 0.25 (cite). I then compared to the full model via a likelihood ratio test, and examined the percent change in coefficients between the full model and the reduced model. If the percent change is large, then some variables that were removed were providing explanatory power.  
+
+I then added those variables back in one by one and again compared using LRT and percent coefficient change. If any variables did not contribute significantly to the explanatory power of the model, I removed them to create my proposed main effects model.  
+
+To look for the presence of interactions, I first decided what interactions would make sense biologically, and then added those to the main effects model one at a time. I evaluated the difference compared to the main effects model as explained above.  
+
+Finally, I evaluated model goodness-of-fit and calculated AIC scores to compare the remaining models.  
+
+
+```{r}
+m = "main effects"
+```
 
 #### Null and full models
 
@@ -1292,11 +1348,10 @@ modsHF[[1]] <- glm(as.formula(paste0(
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 modsHF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mod_diff(modsHF[[1]], modsHF[[2]]) # don't assign or return anything from function bc I don't need the output
 
-cat("\n\n")
-anova(modsHF[[1]], modsHF[[2]], test="LRT")
-# mod_diff(modsHF[[1]], modsHF[[2]])
-
+# mDiff <- mod_diff(modsHF[[1]], modsHF[[2]])
+# need to assign it to something or it will print the output in addition to the print statement. but assigning may disable the print statement.
 ```
 
 #### Other models
@@ -1304,14 +1359,8 @@ anova(modsHF[[1]], modsHF[[2]], test="LRT")
 ```{r echo=FALSE}
 modsHF[[3]] <- glm(as.formula(paste0(
   resp,"~ fdate")),
-  # resp,"~ species + obs_int")), # this was when resp == misclass
   data=dataMod, family=binomial)
-# cat("\n\nCompare to full model:\n\n")
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[3]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[3]])
-# cat("\nCompare to null model:\n\n")
-# anova(modsHF[[2]], modsHF[[3]], test="LRT")
 ```
 
 ```{r echo=FALSE}
@@ -1321,12 +1370,7 @@ modsHF[[4]] <- glm(as.formula(paste0(
   # resp,"~ species")),
   resp,"~ fdate + obs_int")),
   data=dataMod, family=binomial)
-cat("Compare to full model:\n\n")
-cat("\n\nCompare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[4]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[4]])
-# cat("\nCompare to null model:\n\n")
-# anova(modsHF[[2]], modsHF[[4]], test="LRT")
 ```
 
 
@@ -1335,42 +1379,70 @@ mod_diff(modsHF[[1]], modsHF[[4]])
 modsHF[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
-  resp,"~ fdate + obs_int + cam_fate")),
+  resp,"~ fdate + obs_int + species")),
   data=dataMod, family=binomial)
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[5]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[5]])
-# cat("\nCompare to null model:\n\n")
-# anova(modsHF[[2]], modsHF[[5]], test="LRT")
 ```
-
-```{r echo=FALSE}
+```{r}
 
 modsHF[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
-  resp,"~ fdate + obs_int + cam_fate")),
+  resp,"~ fdate + obs_int + species + nest_age")),
   data=dataMod, family=binomial)
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[6]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[6]])
-# cat("\nCompare to null model:\n\n")
-# anova(modsHF[[2]], modsHF[[5]], test="LRT")
+```
+
+
+#### Analysis, part 1: select main effects model
+
+```{r echo=FALSE}
+aicHF <- aic_mod(modsHF)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
 
 #### Interaction models
+Specify the main effects model, and compare interaction models to it.
+In this case, it's the same as the full model.
 
-```{r}
+```{r echo=FALSE}
+
 modsHF[[7]] <- glm(as.formula(paste0(
-  
-  resp, "~ fate_date * obs_int"
-  
-)))
-
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[6]], test="LRT")
-mod_diff(modsHF[[1]], modsHF[[6]])
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+mod_diff(modsHF[[1]], modsHF[[7]])
 ```
+
+```{r echo=FALSE, warning=FALSE}
+modsHF[[9]] <- glm(as.formula(paste0(
+  
+  resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+mod_diff(modsHF[[1]], modsHF[[9]])
+
+
+modsHF[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+mod_diff(modsHF[[1]], modsHF[[8]])
+
+
+modsHF[[9]] <- glm(as.formula(paste0(
+  
+  resp, "~ species + obs_int + cam_fate + species * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+mod_diff(modsHF[[1]], modsHF[[9]])
+```
+
 
 #### Analysis
 
@@ -1382,7 +1454,7 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 
 ----------------------------------------------------------------------
 
-## Excluding 2021 data
+## Question 1, excluding 2021 data
 
 <!-- #### Initialize - Choose the data and response var, create list to store models. -->
 
@@ -1394,14 +1466,21 @@ modsHF  <- list()
 
 #### Univariate models
 
-```{r eval=FALSE, include=FALSE}
+```{r echo=FALSE, warning=FALSE}
 # HF_no2021  <- univar_mod("HF_mis", ndGLM_scl2)
-HF_no2021  <- univar_mod(resp, dataMod)
-HF_no2021
+# HF_no2021  <- univar_mod(resp, dataMod)
+# HF_no2021[2]
+u_no2021 <- univar_mod(resp, dataMod)
+# u_no2021[[1]]
+# HF_inc2021[1] # this is giving weird output as HTML
+tab <- u_no2021[[2]]
+filename <- save_tab(tab)
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 ```
 
 
-```{r echo=FALSE, warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 dataMod |> 
   select(c("misclass","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
   tbl_uvregression(
@@ -1417,6 +1496,10 @@ dataMod |>
 #### Multivariate models
 
 <!-- 1.  Null and full models -->
+```{r}
+
+m = "main effects"
+```
 
 ```{r warning=FALSE, include=FALSE}
 modsHF[[1]] <- glm(as.formula(paste0(
@@ -1425,8 +1508,6 @@ modsHF[[1]] <- glm(as.formula(paste0(
 
 modsHF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-cat("\n\n")
-anova(modsHF[[1]], modsHF[[2]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[2]])
 
 ```
@@ -1438,47 +1519,33 @@ modsHF[[3]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species")),
   data=dataMod, family=binomial)
-# cat("\n\nCompare to full model:\n\n")
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[3]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[3]])
-# cat("\nCompare to null model:\n\n")
-# anova(modsHF[[2]], modsHF[[3]], test="LRT")
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsHF[[4]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate")),
   data=dataMod, family=binomial)
-# cat("\n\nCompare to full model:\n\n")
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[4]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[4]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsHF[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate + obs_int")),
   data=dataMod, family=binomial)
-# cat("\n\nCompare to full model:\n\n")
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[5]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[5]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsHF[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate + obs_int + fdate")),
   data=dataMod, family=binomial)
-# cat("\n\nCompare to full model:\n\n")
-cat("Compare to full model:\n\n")
-anova(modsHF[[1]], modsHF[[6]], test="LRT")
 mod_diff(modsHF[[1]], modsHF[[6]])
 ```
 
@@ -1516,12 +1583,20 @@ dataMod <- ndGLM_scl1[ndGLM_scl1$final_fate!=1,]
 
 ### Univariate models
 
-```{r eval=FALSE, include=FALSE}
-F_inc2021 <- univar_mod(resp, dataMod)
-F_inc2021
+```{r echo=FALSE, warning=FALSE}
+# F_inc2021 <- univar_mod(resp, dataMod)
+# F_inc2021[2]
+u_inc2021 <- univar_mod(resp, dataMod)
+# u_inc2021[1]
+# HF_inc2021[1] # this is giving weird output as HTML
+tab <- u_inc2021[[2]]
+filename <- save_tab(tab)
+# filename <- save_tab(u_inc2021[2])
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 # dataMod |> select()
 ```
-```{r echo=FALSE, warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 
 dataMod |> 
   select(c("misclass","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
@@ -1538,74 +1613,68 @@ dataMod |>
 ### Multivariate models
 
 ####  Null and full models
+```{r}
 
-```{r echo=FALSE}
+m = "main effects"
+```
+
+```{r include=FALSE}
 modsF[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 modsF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-# cat("\n\n")
-cat("Compare to full model:\n\n")
-anova(modsF[[1]], modsF[[2]], test="LRT")
 mod_diff(modsF[[1]], modsF[[2]])
 
 ```
 
 ####  Other models
 
-```{r echo=FALSE}
+```{r include=FALSE}
 modsF[[3]] <- glm(as.formula(paste0(
   # resp,"~ obs_int")),
   resp,"~ cam_fate")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-cat("Compare to full model:\n\n")
-anova(modsF[[1]], modsF[[3]], test="LRT")
 
 mod_diff(modsF[[1]], modsF[[3]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsF[[4]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-cat("Compare to full model:\n\n")
-anova(modsF[[1]], modsF[[4]], test="LRT")
 
 mod_diff(modsF[[1]], modsF[[4]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsF[[5]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int + fdate")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-cat("Compare to full model:\n\n")
-anova(modsF[[1]], modsF[[5]], test="LRT")
 
 mod_diff(modsF[[1]], modsF[[5]])
 ```
 
 <!-- #### Interaction models -->
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
 modsF[[6]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int + fdate + nest_age")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-cat("Compare to full model:\n\n")
-anova(modsF[[1]], modsF[[6]], test="LRT")
-
 mod_diff(modsF[[1]], modsF[[6]])
 ```
 
 #### Analysis
+
+For this analysis, because the first and second models (ranked by AIC) are so close, I would choose the model with only camera fate as the best model. I reduced the model to just cam_fate, and when I added back the next most significant variable (obs_int) the Chi-sq p-value (compared to full model) almost doubled to about 0.5. So I probably didn't need to add back the other variables, or should I do so in case they are having an effect on one of the explanatory variables?
 
 ```{r echo=FALSE}
 aicF <- aic_mod(modsF)
@@ -1630,12 +1699,20 @@ dataMod <- ndGLM_scl2[ndGLM_scl2$final_fate!=1,]
 
 #### Univariate models
 
-```{r eval=FALSE, include=FALSE}
-u <- univar_mod(resp, dataMod)
-u
+```{r echo=FALSE, warning=FALSE}
+# u <- univar_mod(resp, dataMod)
+# u[2]
+u_no2021 <- univar_mod(resp, dataMod)
+# u_no2021[1]
+# HF_inc2021[1] # this is giving weird output as HTML
+tab <- u_no2021[[2]]
+filename <- save_tab(tab)
+# filename <- save_tab(u_no2021[2])
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 
 dataMod |> 
   select(c("misclass","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
@@ -1652,6 +1729,10 @@ dataMod |>
 #### multivariate models
 
 <!-- 1.  null and full models-->
+```{r}
+
+m = "main effects"
+```
 
 ```{r include=FALSE}
 modsf[[1]] <- glm(as.formula(paste0(
@@ -1660,9 +1741,6 @@ modsf[[1]] <- glm(as.formula(paste0(
 
 modsf[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-# cat("\n\n")
-cat("Compare to full model:\n\n")
-anova(modsf[[1]], modsf[[2]], test="LRT")
 mod_diff(modsf[[1]], modsf[[2]])
 
 ```
@@ -1671,12 +1749,10 @@ mod_diff(modsf[[1]], modsf[[2]])
 
 ```{r include=FALSE}
 modsf[[3]] <- glm(as.formula(paste0(
-  resp, "~ obs_int + fdate"
+  # resp, "~ obs_int + fdate"
+  resp, "~ nest_age + fdate"
 )), data=dataMod, family=binomial)
 
-# cat("\n\n")
-cat("Compare to full model:\n\n")
-anova(modsf[[1]], modsf[[3]], test="LRT")
 mod_diff(modsf[[1]], modsf[[3]])
 ```
 
@@ -1685,8 +1761,6 @@ modsf[[4]] <- glm(as.formula(paste0(
   resp, "~ obs_int + fdate + nest_age"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsf[[1]], modsf[[4]], test="LRT")
 mod_diff(modsf[[1]], modsf[[4]])
 ```
 
@@ -1695,25 +1769,26 @@ modsf[[5]] <- glm(as.formula(paste0(
   resp, "~ cam_fate + obs_int + fdate + nest_age"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsf[[1]], modsf[[5]], test="LRT")
 mod_diff(modsf[[1]], modsf[[5]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 
+modsf[[6]] <- glm(as.formula(paste0(
+  resp, "~ nest_age"
+)), data=dataMod, family=binomial)
+
+mod_diff(modsf[[1]], modsf[[6]])
 ```
 
 <!-- 3.  interaction models-->
 
 ```{r include=FALSE}
-modsf[[5]] <- glm(as.formula(paste0(
-  resp, "~ obs_int * fdate"
-)), data=dataMod, family=binomial)
-
-cat("Compare to full model:\n\n")
-anova(modsf[[1]], modsf[[5]], test="LRT")
-mod_diff(modsf[[1]], modsf[[5]])
+# modsf[[5]] <- glm(as.formula(paste0(
+#   resp, "~ obs_int * fdate"
+# )), data=dataMod, family=binomial)
+# 
+# mod_diff(modsf[[1]], modsf[[5]])
 ```
 
 <!-- 4. analysis-->
@@ -1744,12 +1819,20 @@ dataMod <- ndGLM_scl1
 
 ### Univariate models
 
-```{r eval=FALSE, include=FALSE}
-C_inc2021 <- univar_mod(resp, dataMod)
-C_inc2021                               # show summaries
+```{r echo=FALSE, warning=FALSE}
+# C_inc2021 <- univar_mod(resp, dataMod)
+# C_inc2021[2]                               # show summaries
+u_inc2021 <- univar_mod(resp, dataMod)
+# u_inc2021[1]
+# HF_inc2021[1] # this is giving weird output as HTML
+tab <- u_inc2021[[2]]
+filename <- save_tab(tab)
+# filename <- save_tab(u_inc2021[2])
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 
 dataMod |> 
   select(c("is_u","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
@@ -1766,16 +1849,18 @@ dataMod |>
 ### Models
 
 #### Null and full models
+```{r}
 
-```{r echo=FALSE}
+m = "main effects"
+```
+
+```{r include=FALSE}
 modsC[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 modsC[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-# cat("\n\n")
-cat("Compare to full model:\n\n")
 anova(modsC[[1]], modsC[[2]], test="LRT")
 # mod_diff(modsC[[1]], modsC[[2]])
 
@@ -1783,22 +1868,17 @@ anova(modsC[[1]], modsC[[2]], test="LRT")
 
 #### Other models
 
-```{r echo=FALSE}
+```{r include=FALSE}
 # significant or close to significant in univariate models
 modsC[[3]] <- glm(as.formula(paste0(
   # resp, "~ species + nest_age"
   resp, "~ nest_age"
 )), data=dataMod, family=binomial)
-cat("\n*** compare to full model ***\n\n")
-anova(modsC[[1]], modsC[[3]], test="LRT")
 mod_diff(modsC[[1]], modsC[[3]])
 
-# cat("\n\n*** compare to null model ***\n\n")
-# anova(modsC[[2]], modsC[[3]], test="LRT")
-# mod_diff(modsC[[2]], modsC[[3]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 # add next most significant variable
 modsC[[4]] <- glm(as.formula(paste0(
   # resp, "~ species + nest_age + obs_int"
@@ -1806,42 +1886,31 @@ modsC[[4]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsC[[1]], modsC[[4]], test="LRT")
 mod_diff(modsC[[1]], modsC[[4]])
 
-# anova(modsC[[2]], modsC[[4]], test="LRT")
-# mod_diff(modsC[[2]], modsC[[4]])
 ```
 
-```{r echo=FALSE}
+```{r include=FALSE}
 # and next
 modsC[[5]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age + fdate"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsC[[1]], modsC[[5]], test="LRT")
 mod_diff(modsC[[1]], modsC[[5]])
 
-# anova(modsC[[2]], modsC[[5]], test="LRT")
-# mod_diff(modsC[[2]], modsC[[5]])
 ```
 
-```{r}
+```{r include=FALSE}
 
 modsC[[6]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age + fdate + obs_int"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsC[[1]], modsC[[6]], test="LRT")
 mod_diff(modsC[[1]], modsC[[6]])
 ```
 
-####  Interaction models
 
-#### Analysis
+#### Analysis 1: main effects model
 
 ```{r echo=FALSE}
 oddRat <- odd_rat(modsC)
@@ -1854,6 +1923,42 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 
 ```
 
+####  Interaction models
+
+Specify chosen main effects model, compare to proposed interaction models
+```{r include=FALSE}
+
+# modsC[[7]] <- glm(as.formula(paste0(
+#   resp, "~ species + nest_age + fdate" 
+# )), data=dataMod, family=binomial)
+# actually, compare to the main effects model as specified above (model 5) so it doesn't print twice
+
+modsC[[7]] <- glm(as.formula(paste0(
+  resp, "~ species * nest_age + fdate" 
+)), data=dataMod, family=binomial)
+
+
+modsC[[8]] <- glm(as.formula(paste0(
+  resp, "~ species + nest_age * fdate" 
+)), data=dataMod, family=binomial)
+
+
+mod_diff(modsC[[5]], modsC[[7]])
+mod_diff(modsC[[5]], modsC[[8]])
+```
+
+#### Analysis 2: including interaction models
+
+```{r echo=FALSE}
+# oddRat <- odd_rat(modsC)
+aicTab <- aic_mod(modsC)
+# aicTab
+
+filename <- save_tab(aicTab)
+
+knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
+
+```
 -----------------------------------------------------------------------------
 
 ## Excluding 2021 data
@@ -1862,7 +1967,7 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 
 <!-- Choose the data and response var, create list to store models -->
 
-```{r include=FALSE}
+```{r echo=FALSE}
 modsC2   <- list()
 resp    <- "is_u"
 dataMod <- ndGLM_scl2
@@ -1870,12 +1975,20 @@ dataMod <- ndGLM_scl2
 
 #### Univariate models
 
-```{r eval=FALSE, include=FALSE}
-C_no2021 <- univar_mod(resp, dataMod)
-C_no2021                               # show summaries
+```{r echo=FALSE, warning=FALSE}
+# C_no2021 <- univar_mod(resp, dataMod)
+# C_no2021[2]                               # show summaries
+u_no2021 <- univar_mod(resp, dataMod)
+# u_no2021[1]
+# HF_inc2021[1] # this is giving weird output as HTML
+tab <- u_no2021[[2]]
+filename <- save_tab(tab)
+# filename <- save_tab(u_no2021[2])
+
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r eval=FALSE, warning=FALSE, include=FALSE}
 dataMod |> 
   select(c("is_u","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
   tbl_uvregression(
@@ -1889,6 +2002,10 @@ dataMod |>
 ```
 
 #### Models
+```{r}
+
+m = "main effects"
+```
 
 <!-- 1.  Null and full models -->
 
@@ -1900,9 +2017,7 @@ modsC2[[1]] <- glm(as.formula(paste0(
 modsC2[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
 # cat("\n\n")
-cat("Compare to full model:\n\n")
-anova(modsC2[[1]], modsC2[[2]], test="LRT")
-# mod_diff(modsC[[1]], modsC[[2]])
+mod_diff(modsC2[[1]], modsC2[[2]])
 
 ```
 
@@ -1914,10 +2029,27 @@ modsC2[[3]] <- glm(as.formula(paste0(
   resp, "~ nest_age"
 )), data=dataMod, family=binomial)
 
-cat("Compare to full model:\n\n")
-anova(modsC2[[1]], modsC2[[3]], test="LRT")
 mod_diff(modsC2[[1]], modsC2[[3]])
 
+```
+
+```{r include=FALSE}
+
+modsC2[[4]] <- glm(as.formula(paste0(
+
+  resp, "~ nest_age + species"
+)), data=dataMod, family=binomial)
+
+mod_diff(modsC2[[1]], modsC2[[4]])
+```
+```{r include=FALSE}
+
+modsC2[[5]] <- glm(as.formula(paste0(
+
+  resp, "~ nest_age + species + fdate"
+)), data=dataMod, family=binomial)
+
+mod_diff(modsC2[[1]], modsC2[[5]])
 ```
 
 <!-- 3.  Interaction models -->
@@ -1938,8 +2070,8 @@ knitr::include_graphics(paste0("analysis/", fn), dpi=dpi)
 <!-- ## QUESTION 4: If fate classified in field, what affects misclassification? -->
 
 <!-- -   Remove nests assigned to a fate in the field -->
--   Remove nests marked unknown in the field
--   Response: HF_mis 
+<!-- -   Remove nests marked unknown in the field -->
+<!-- -   Response: HF_mis  -->
 
 <!-- But then how is this different from question 1, where we were forced to exclude unknown fate nests? -->
 

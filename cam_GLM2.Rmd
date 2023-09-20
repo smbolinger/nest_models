@@ -1,13 +1,13 @@
 ---
 title: "CameraGLM"
 output:
-  word_document:
-    reference_docx: "cam_GLM_templ.docx"
+  html_document: default
   pdf_document: default
     # fig.width: 6
     # fig.height: 4
     # highlight: pygments
-  html_document: default
+  word_document:
+    reference_docx: "cam_GLM_templ.docx"
 date: "2023-08-30"
 editor_options:
   markdown:
@@ -1118,11 +1118,133 @@ aic_mod <- function(mods){
   
   # mods <- modsF
   # mods[[1]]$call 
+  mods <- modsHF
   modEQ <- paste(sapply(mods,  
                         # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
                         ), sep = " ")
-  # modEQ
+  modEQ
+  # if(sapply(grepl("*", ))
+  # lapply(modEQ, function(x) sapply(x, grep("*")))
+  # eq <- lapply(modEQ, grep, pattern="*")
+  # 
+  # 
+  # if(lapply(modEQ, grepl, pattern="*")) # doesn't work
+  # 
+  # n <- grep("[:alpha:]", modEQ)
+  # m <- grep("\\s\\*\\s", modEQ) # works
+  # m <- grep("[\w]\\s\\*\\s[\w]", modEQ) # doesn't work - I don't think this is R syntax
+  # m <- grep("\\w\\s\\*\\s\\w", modEQ) # works
+  # m <- regexpr("\\w\\s\\*\\s\\w", modEQ) # gives a different output
+  # m <- str_extract(modEQ, "\\w\\s\\*\\s\\w")
+  # could also do grep with value=TRUE
+  # m <- str_extract(modEQ, "\\w+\\s\\*\\s\\w+")
+  m <- str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")
+  n <- !is.na(m)
+  
+  
+  # \\w = word, includes alphanumeric and underscores
+  # you can also name pattern groups? wonder how that might help...
+  m
+  r <- paste0(m[,2], " + ", m[,3], " + ", m[,2], ":", m[,3])
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], s) # doesn't work
+  r
+  s <- modEQ
+  for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], s)
+  grep(m[11,1], s)
+  sub("(\\w+)\\s\\*\\s(\\w+)", r) # can't use something like this because it's row-specific
+  # could maybe build a regex pattern that specifies the contents of r
+  s
+  # maybe because s is a vector of strings? but I thought that was what it's supposed to be?
+  grep(m[11,1], unlist(s)) # nope
+  # dunno if it matters that I'm using literal spaces and not \\s
+  # I don't know why you can index m like a df when it is a list
+  # oh, it's a matrix... kind of a weird return format??
+  r
+  # if(!is.na(m)) sub("\\w+\\s\\*\\s\\w+", r, modEQ) 
+  #      obv doesn't work; "if" returns more than 1 value
+  # 
+  # which(!is.na(r)) # evidently, NA + NA != NA
+  # modEQ[which(!is.na(m))] # these don't even have the same number of components...
+  
+  # modEQ[m[which(!is.na(m))]]
+  # m[which(!is.na(m)),] # trying to find which rows in m don't have NAs
+  m[which(!is.na(m[,2]))]
+  # I guess this gives the "names" of these rows, which R assumes to be the first column
+  # 
+  
+  # modEQ[m[which(!is.na(m[,2]))]]
+  # modEQ == m[which(!is.na(m[,2]))]
+  # grep( m[which(!is.na(m[,2]))])
+  # which(!is.na(m[2,]))
+  # which(!is.na(m)) # would give row num for a df, but not for matrix
+  # 
+  # 
+  # str_replace(modEQ, m[which(!is.na(m[,2]))]), 
+  m[11,1]
+  # !is.na(m[])
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) modEQ[i] = r[i] # not quite
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], l) # nope
+  s <- modEQ
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(get(m[i,1]), r[i], s)
+  # this kind of does the opposite - takes string and makes into var name
+  
+  for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], s)
+  a <- list()
+  # for(i in 1:length(modEQ)) append(a, is.na(m[i,1])) # not working
+  # so maybe the !is.na statement is not evaluating the way I think it is
+  # a <- for(i in 1:length(modEQ)) which(!is.na(m[i,1]))
+   
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(paste(m[i,1]), paste(r[i]), s)
+  for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(paste(m[i,1]), paste(r[i]), s)
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(paste0("^.*",m[i,1]), paste(r[i]), s)
+  # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) cat("TRUE", m[i,1]) # does appear to be finding the correct elements...
+  for(i in 1:length(modEQ)) if(!is.na(m[i,1])) 
+  s
+  d <- as.data.frame(s)
+  grep(m[11,1], s) # can't call a string pattern from a var
+  n <- gsub(" ", "", m[,1]) # deletes spaces, but doesn't help
+  n
+  p <- paste(modEQ, sep="|", collapse="|") # not correct
+  p <- paste(m, sep="|", collapse="|")
+  p <- paste(m[,1], sep="|", collapse="|") # this grabs the correct strings
+  p
+  str_extract(modEQ, p)
+  str_match(modEQ, p) # why can't it find the patterns??
+  # so in this one, it's matching the first of the strings that it finds (generally "fdate")
+  
+  str_extract(m[,1], p)
+  # str_extract_all(s, paste(gsub(" ", "", m[,1]), collapse="|"))
+  # str_extract(s, paste(n, collapse="|"))
+  # str_extract(s, eval(n))
+  # get(n)
+  # get(n[11])
+  # str_match(s, paste(n, collapse="|"))
+  # str_match(s, paste(n, sep="|", collapse="|")) # why does this work in my other script?
+  grep(paste(m[11,1]), s)
+  grep("species * obs_int", s)
+  str_match("species * obs_int", s) # needs to be regex, not string
+  str_extract("species * obs_int", s)
+  
+  grep("species*obs_int", s) # ok, so these don't work as is
+  # is a string, not a pattern
+  paste(m[11,1])
+  class(m[11,1])
+  # s is a character vector - good
+  # why isn't the paste function doing what I thought it would?
+  # maybe because there are spaces?
+  paste(m[,1], collapse="|")
+  # str_extract_all(d, paste(m[,1], collapse="|"))
+  m[,1]
+  # m <- grep("[:alpha:]\\s\\*\\s[:alpha:]+", modEQ) # doesn't work
+  
+  # m <- grep("[:LETTER:]\\s\\*\\s[:LETTER:]", modEQ) # doesn't work
+  # for(i in 1:length(modEQ)) {
+  #   if(grepl("\\*", modEQ[i]))
+  #     grep("")
+  #     sub("[:alpha:]+//s")
+  # }
+    
   nestAIC <- aictab(cand.set = mods, modnames = modEQ, sort = T)
 
   AICtab <- gt(nestAIC) |> 
@@ -1337,6 +1459,7 @@ Finally, I evaluated model goodness-of-fit and calculated AIC scores to compare 
 
 ```{r}
 m = "main effects"
+modorder <- "spp+age+fate+date+int" # just a reminder so everything is neat
 ```
 
 #### Null and full models
@@ -1379,7 +1502,7 @@ mod_diff(modsHF[[1]], modsHF[[4]])
 modsHF[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
-  resp,"~ fdate + obs_int + species")),
+  resp,"~ species +fdate + obs_int")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[5]])
 ```
@@ -1388,7 +1511,7 @@ mod_diff(modsHF[[1]], modsHF[[5]])
 modsHF[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
-  resp,"~ fdate + obs_int + species + nest_age")),
+  resp,"~ species + nest_age + fdate + obs_int")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[6]])
 ```
@@ -1411,7 +1534,8 @@ In this case, it's the same as the full model.
 modsHF[[7]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
-  resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[7]])
 ```
@@ -1419,35 +1543,58 @@ mod_diff(modsHF[[1]], modsHF[[7]])
 ```{r echo=FALSE, warning=FALSE}
 modsHF[[9]] <- glm(as.formula(paste0(
   
-  resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
   
 )), data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[9]])
+# mod_diff(modsHF[[1]], modsHF[[9]])
 
 
 modsHF[[8]] <- glm(as.formula(paste0(
   
-  resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
   data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[8]])
+# mod_diff(modsHF[[1]], modsHF[[8]])
 
 
-modsHF[[9]] <- glm(as.formula(paste0(
+modsHF[[10]] <- glm(as.formula(paste0(
   
-  resp, "~ species + obs_int + cam_fate + species * obs_int"
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
   
 )), data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[9]])
+mod_diff(modsHF[[1]], modsHF[[10]])
+
+
+modsHF[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+mod_diff(modsHF[[1]], modsHF[[11]])
+
+
+# modsHF[[12]] <- glm(as.formula(paste0(
+#   
+#   resp, "~ species + obs_int + cam_fate + species * obs_int"
+#   
+# )), data=dataMod, family=binomial)
+# 
+# mod_diff(modsHF[[1]], modsHF[[12]])
 ```
 
 
 #### Analysis
 
 ```{r echo=FALSE}
-aicHF <- aic_mod(modsHF)
+# mods  <- modsHF[[c(7:12)]]
+mods  <- modsHF[c(1, 7:11)]
+aicHF <- aic_mod(mods)
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```

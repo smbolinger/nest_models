@@ -1054,7 +1054,7 @@ mod_diff <- function(mFull, mAlt, modtype){ # argument order matters - names sho
   # **argument 1 (type 'list') cannot be handled by 'cat'**
   # # try cat(unlist(x))
   # cat(sprintf("Compare to %s model:\n\n"), modtype)
-  cat("Compare to full or main effects model:\n\n")
+  cat("\nCompare to full or main effects model:\n\n")
   print(comp)
   # for(i in 1:length(comp)) cat(comp[i])
   # for(i in 1:length(comp)) rende(comp[i])
@@ -1139,13 +1139,127 @@ aic_mod <- function(mods){
   # m <- str_extract(modEQ, "\\w\\s\\*\\s\\w")
   # could also do grep with value=TRUE
   # m <- str_extract(modEQ, "\\w+\\s\\*\\s\\w+")
-  m <- str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")
-  n <- !is.na(m)
+  
+  # m <-paste0( str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")[,1], collapse="|")
+  # I don't think collapsing the strings helps me. 
+  
+  m <- gsub(" ", "\\\\s", str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") )
+  m
+  
+  m[,1]
+  # this function operates on each instance of the pattern separately
+  r <- function(eq) {
+    # browser()
+    # t <- m[11,1]
+    # m <- str_match(modEQ, eq)
+    # m is evaluating to a single string of NA (not a matrix)
+    # oh right, str_match requires a regex pattern
+    # I can do that, but what becomes my function argument?
+    # m <- str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")
+    # m[which(m[,1]==eq),] # this isn't doing anything to help select the correct thing to replace
+    # r = m[which(m[,1]==eq),] # this isn't doing anything period
+    # r = m[,1][which(m[,1]==eq)] # this isn't doing anything period
+    # r = which(m[,1]==eq) # this isn't doing anything period
+    # r = which(grep(eq, )) # this isn't doing anything period
+    r = which(m[,1] %in% eq)
+    # r = which(match(eq, m[,1])) # arg to which is not logical
+    # r = which(eq %in% m[,1]) # r still empty
+    # want the row index
+    paste0(m[r,2]," + ",m[r,3]," + ",m[r,2],":",m[r,3])
+    
+  }
+  p <- r("species * obs_int") # r creates the proper replacement...
+  # but it still isn't substituted in properly
+  
+  p <-paste0("\\b", m[,1], "\\b", collapse="|")
+  p
   
   
+  # with this one, for some reason, r becomes 1 when it's which(eq %in% m[,1])
+  # p <- r(modEQ[11]) # this is not the correct argument - it's the whole string, not the substring we're looking for
+  # eq <- modEQ[11]
+  # take apart what the col2hex function etc are doing:
+  # - pattern = string of all possible color names with separator character
+  # -->"if you see any of these within x"
+  # - replacement = function that takes a color and returns the hex code 
+  # --> "replace them with the hex code using this function"
+  # so what exactly is the (uncalled) argument to col2hex?? the color name
+  # 
+  # so for my strings:
+  # - pattern = set of all possible interaction terms (R-style, with *)
+  # --> if you see any of these strings in modEQ
+  # - replacement = function of 
+  # --> replace them using this function to calculate the expanded expression
+  # argument to the function is just any of the strings in pattern
+  # - need a way to match pattern to replacement
+  # - can't rely on replacing in order for THIS function
+  # 
+  # r(m)
+  # r <- paste0(m[,2]," + ",m[,3]," + ",m[,2],":",m[,3])
+  # r <- paste0
+  # so what is this function actually acting on?
+  # 
+  str_replace(modEQ, m, r )
+  # string recycling error, fml 
+  str_replace(modEQ, m[,1], r )
+  # still doesn't work
+  str_replace(modEQ, 
+              paste0("\\b",m[,1],"\\b", collapse="|"), 
+              r )
+  str_replace_all(modEQ, p, r)
+  modEQ
+  # p <-str_c("\\b", m[,1], "\\b", collapse="|")
+  # n <- !is.na(m)
+  # for(i in 1:length(modEQ)){
+  #   str_replace(modEQ, 
+  #               # str_match(modEQ[i], "(\\w+)\\s\\*\\s(w+)"),
+  #               m[i,1],
+  #               paste0(m[i,2], "+", m[i,3], "+", m[i,2], ":", m[i,3]))
+   # so this might be interpreting "paste" as a function input for replacement, except it has arguments associated 
+  
+  # c("apple", "duck")
+  # grep( paste0("\\b",m[,1],"\\b", collapse="|"), modEQ) 
+  # str_match(modEQ, paste0("\\b",m[,1],"\\b", collapse="|"))
+  # str_match(modEQ, paste0(m[,1], collapse="|"))
+  # need to assign it to something and allow it to work on vectors instead of in loop?
+  # but even this output isn't correct...
+  # modEQ <- str_replace(modEQ,
+  #                      m,
+  #                      paste0(m[,2],"+",m[,3],"+",m[,2],":",m[,3]))
+  modEQ <- modEQ |> str_replace( 
+    # str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") ,
+    m[,1],
+    paste0(m[,2],"+",m[,3],"+",m[,2],":",m[,3]))
+  
+  str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")[,1] 
+  # maybe there are other string functions I'm just not thinking of??
+  
+  modEQ <- modEQ |> str_replace( 
+    # str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")[,1] ,
+    str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)"),
+    
+    # m[,1],
+    # m[11,1],
+    # r[11]
+    paste0(m[,2],"+",m[,3],"+",m[,2],":",m[,3])
+    
+    # "fdate * obs_int",
+    # "fdate + obs_int + fdate:obs_int" # even these two don't work??
+    # ok, shouldn't be actual strings
+  )
+  modEQ
+  
+  str_extract
+  #except now modEQ has 33 entries. I can remove some, but want to know why that's happening
+  #
   # \\w = word, includes alphanumeric and underscores
   # you can also name pattern groups? wonder how that might help...
-  m
+}
+```
+
+
+```{r include=FALSE}
+# m
   r <- paste0(m[,2], " + ", m[,3], " + ", m[,2], ":", m[,3])
   # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], s) # doesn't work
   r
@@ -1154,9 +1268,9 @@ aic_mod <- function(mods){
   grep(m[11,1], s)
   sub("(\\w+)\\s\\*\\s(\\w+)", r) # can't use something like this because it's row-specific
   # could maybe build a regex pattern that specifies the contents of r
-  s
+  # s
   # maybe because s is a vector of strings? but I thought that was what it's supposed to be?
-  grep(m[11,1], unlist(s)) # nope
+  # grep(m[11,1], unlist(s)) # nope
   # dunno if it matters that I'm using literal spaces and not \\s
   # I don't know why you can index m like a df when it is a list
   # oh, it's a matrix... kind of a weird return format??
@@ -1169,7 +1283,7 @@ aic_mod <- function(mods){
   
   # modEQ[m[which(!is.na(m))]]
   # m[which(!is.na(m)),] # trying to find which rows in m don't have NAs
-  m[which(!is.na(m[,2]))]
+  # m[which(!is.na(m[,2]))]
   # I guess this gives the "names" of these rows, which R assumes to be the first column
   # 
   
@@ -1244,6 +1358,18 @@ aic_mod <- function(mods){
   #     grep("")
   #     sub("[:alpha:]+//s")
   # }
+  # example from help page for str_replace:
+  colours <- str_c("\\b", colors(), "\\b", collapse="|")
+  col2hex <- function(col) {
+    rgb <- col2rgb(col)
+    rgb(rgb["red", ], rgb["green", ], rgb["blue", ], max = 255)
+  }
+  # col2hex("red")
+  x <- c(
+  "Roses are red, violets are blue",
+  "My favourite colour is green"
+  )
+  str_replace_all(x, colours, col2hex)
     
   nestAIC <- aictab(cand.set = mods, modnames = modEQ, sort = T)
 
@@ -1260,7 +1386,7 @@ aic_mod <- function(mods){
       column_labels.font.weight = "bold"
     )
   return(AICtab)
-}
+
 ```
 
 Create combo AIC/BIC tables
@@ -1306,8 +1432,13 @@ full_tab <- function(nestAIC, nestBIC){
 Save tables to file
 
 ```{r include=FALSE}
+# Input DPI for gt table AIC table output:
+dpi      <- (1800/6)  # img width (px) / desired img width (in)
+
 nm       <- function(x) substitute(x)
+
 save_tab <- function(tab){
+  
   now = format(Sys.time(), "%m%d_%H%M%S") # seconds bc tables all generated in < 1 min
   # file_name <- paste0(names(tab)[1], "aicbic_", now, ".rtf")
 
@@ -1322,7 +1453,7 @@ save_tab <- function(tab){
 
 ```{r}
 # Input DPI for gt table AIC table output:
-dpi <- (1800/6)  # img width (px) / desired img width (in)
+# dpi <- (1800/6)  # img width (px) / desired img width (in)
 ```
 
 ## PREPARE THE DATA
@@ -1351,6 +1482,8 @@ ndGLM_scl2 <- ndGLM2 %>%
 write.csv(ndGLM_scl1, "scaled1.csv")
 write.csv(ndGLM_scl2, "scaled2.csv")
 ```
+
+
 ```{r eval=FALSE, include=FALSE}
 ndGLM_scl1 <- read.csv("scaled1.csv")
 ndGLM_scl2 <- read.csv("scaled2.csv")
@@ -1484,9 +1617,6 @@ modsHF[[3]] <- glm(as.formula(paste0(
   resp,"~ fdate")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[3]])
-```
-
-```{r echo=FALSE}
 
 modsHF[[4]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
@@ -1494,10 +1624,6 @@ modsHF[[4]] <- glm(as.formula(paste0(
   resp,"~ fdate + obs_int")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[4]])
-```
-
-
-```{r echo=FALSE}
 
 modsHF[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
@@ -1505,8 +1631,6 @@ modsHF[[5]] <- glm(as.formula(paste0(
   resp,"~ species +fdate + obs_int")),
   data=dataMod, family=binomial)
 mod_diff(modsHF[[1]], modsHF[[5]])
-```
-```{r}
 
 modsHF[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
@@ -1537,18 +1661,7 @@ modsHF[[7]] <- glm(as.formula(paste0(
   resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
   # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[7]])
-```
-
-```{r echo=FALSE, warning=FALSE}
-modsHF[[9]] <- glm(as.formula(paste0(
-  
-  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
-  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
-  
-)), data=dataMod, family=binomial)
-
-# mod_diff(modsHF[[1]], modsHF[[9]])
+# mod_diff(modsHF[[1]], modsHF[[7]])
 
 
 modsHF[[8]] <- glm(as.formula(paste0(
@@ -1560,6 +1673,16 @@ modsHF[[8]] <- glm(as.formula(paste0(
 # mod_diff(modsHF[[1]], modsHF[[8]])
 
 
+modsHF[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(modsHF[[1]], modsHF[[9]])
+
+
 modsHF[[10]] <- glm(as.formula(paste0(
   
   # resp, "~ species + obs_int + cam_fate + species * obs_int"
@@ -1567,7 +1690,7 @@ modsHF[[10]] <- glm(as.formula(paste0(
   
 )), data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[10]])
+# mod_diff(modsHF[[1]], modsHF[[10]])
 
 
 modsHF[[11]] <- glm(as.formula(paste0(
@@ -1576,7 +1699,7 @@ modsHF[[11]] <- glm(as.formula(paste0(
   
 )), data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[11]])
+# mod_diff(modsHF[[1]], modsHF[[11]])
 
 
 # modsHF[[12]] <- glm(as.formula(paste0(

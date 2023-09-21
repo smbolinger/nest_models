@@ -67,7 +67,7 @@ Create boxplots:
 grouped = data %>% group_by(num_nests, psurv_real, obs_int, storm_dur, storm_freq)
 
 # These are values you can use to hold everything else constant while you change
-# one variable
+# one variable (nice intermediate values)
 
 nest = 200
 surv = 0.95

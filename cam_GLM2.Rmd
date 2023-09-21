@@ -20,6 +20,7 @@ while (!is.null(dev.list()))  dev.off()
 
 # to make PDFs, need LaTex installed 
 # install tinytex package, THEN run tinytex::install_tintytex()
+ # :%s/search_string/replacement_string/g
 
 # Note that the horizontal lines help in the HTML output, but are overkill in pdf
 # Also, in HTML the differences in the heading types are much more exaggerated
@@ -819,12 +820,9 @@ plot_var <- function(resp, dat, label1, label2){
 
 -   Ends up with NAs for nests w/ unknown fate in the field
 
-```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
+```{r eval=FALSE, fig.dim=c(6,3), message=FALSE, include=FALSE}
 # plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
 plot_var("misclass", ndGLM1, "Misclassified", "Correctly classified")
-``` 
-
-```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 # plot_var("HF_mis", ndGLM2, "Misclassified", "Correctly classified")
 plot_var("misclass", ndGLM2, "Misclassified", "Correctly classified")
 ```
@@ -845,11 +843,8 @@ plot_var("misclass", ndGLM2, "Misclassified", "Correctly classified")
 <!-- ### Third analysis: assigned vs unknown -->
 ### Assigned vs unknown
 
-```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
+```{r eval=FALSE, fig.dim=c(6,3), message=FALSE, include=FALSE}
 plot_var("is_u", ndGLM1, "Unknown", "Assigned")
-```
-
-```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)}
 plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 ```
 
@@ -878,7 +873,7 @@ label_ <- function(y) max(dat[[y]]) * 0.8
 
 ### Fate date vs obs int
 
-```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
+```{r eval=FALSE, fig.dim=c(6,4), warning=FALSE, include=FALSE}
 # ```{r echo=FALSE, warning=FALSE, out.width="75%"}
 
 ggplot(dat, aes(x=fdate, y=obs_int)) +
@@ -893,9 +888,7 @@ ggplot(dat, aes(x=fdate, y=obs_int)) +
   # theme(plot.background = element_rect(color="deepskyblue3", linewidth=2, alpha=0.5))
   # theme(plot.background = element_rect(color="#707070", linewidth=2 ))
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
 
-```{r echo=FALSE, warning=FALSE, fig.dim=c(6,4)}
 ggplot(dat2, aes(x=fdate, y=obs_int)) +
   geom_point() +
   geom_smooth(formula=y~x,
@@ -910,7 +903,7 @@ ggplot(dat2, aes(x=fdate, y=obs_int)) +
 
 ### Nest age vs fate date
 
-```{r echo=FALSE, fig.dim=c(6,4)}
+```{r eval=FALSE, fig.dim=c(6,4), include=FALSE}
 ggplot(dat, aes(x=nest_age, y=fdate)) +
   geom_jitter() +
   geom_smooth(formula=y~x,
@@ -921,9 +914,7 @@ ggplot(dat, aes(x=nest_age, y=fdate)) +
                         aes(label=..eq.label..)) + 
   stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
 
-```{r echo=FALSE, fig.dim=c(6,4)}
 ggplot(dat2, aes(x=nest_age, y=fdate)) +
   geom_jitter() +
   geom_smooth(formula=y~x,
@@ -939,7 +930,7 @@ ggplot(dat2, aes(x=nest_age, y=fdate)) +
 
 ### Nest age vs obs int
 
-```{r echo=FALSE, fig.dim=c(6,4)}
+```{r eval=FALSE, fig.dim=c(6,4), include=FALSE}
 ggplot(dat, aes(x=nest_age, y=obs_int)) +
   geom_jitter() +
   geom_smooth(formula=y~x,
@@ -950,9 +941,7 @@ ggplot(dat, aes(x=nest_age, y=obs_int)) +
                         aes(label=..eq.label..)) + 
   stat_cor(aes(label=paste(..rr.label.., ..p.label.., sep="*`,`~"))) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
-```
 
-```{r echo=FALSE, fig.dim=c(6,4)}
 ggplot(dat2, aes(x=nest_age, y=obs_int)) +
   geom_jitter() +
   geom_smooth(formula=y~x,
@@ -1082,7 +1071,7 @@ Generate odds ratios
 ```{r include=FALSE}
 odd_rat <- function(mods){
   # cat("Odds ratios for all models:\n\n")
-  # oddrats <- paste(sapply(modsC, function(x) exp(x$coefficients)), sep=' ')
+  # oddrats <- paste(sapply(mods, function(x) exp(x$coefficients)), sep=' ')
   oddrats <- paste(sapply(mods, function(x) exp(x$coefficients)), sep=' ')
   # oddrats
   # names(oddrats) <- sapply(oddrats, function(x) substitute(oddrats))
@@ -1095,11 +1084,11 @@ odd_rat <- function(mods){
 Calculate AIC and BIC
 
 ```{r eval=FALSE, include=FALSE}
-dp <- function(x) deparse(x, width.cutoff=150)
+# dp <- function(x) deparse(x, width.cutoff=150)
 
 bic_mod <- function(mods){
   
-  modEQ <- paste(sapply(modsC,  
+  modEQ <- paste(sapply(mods,  
                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
                         ), sep = " ")
   
@@ -1116,11 +1105,60 @@ bic_mod <- function(mods){
 
 ```{r include=FALSE}
 dp <- function(x) deparse(x, width.cutoff=150)
+```
+
+```{r}
 aic_mod <- function(mods){
   
-  # mods <- modsF
+  mods <- mods
+  
+  modEQ <- paste(sapply(mods,  
+                        # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
+                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
+                        ), sep = " ")
+  
+  m <- str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)" )
+  # n <- gsub(" ", "\\\\s", str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") )
+  # n
+  
+  p <- paste(m[,1], sep="|", collapse="|") # this grabs the correct strings
+  p <- gsub(" ", "\\\\s", p)
+  p <- gsub("\\*", "\\\\*", p)
+  
+  r <- function(eq) {
+    # eq = "species * obs_int"
+    r = which(m[,1] %in% eq)
+    paste0(m[r,2]," + ",m[r,3]," + ",m[r,2],":",m[r,3])
+  }
+  
+  modEQ <- str_replace(modEQ, p, r)
+  
+  nestAIC <- aictab(cand.set = mods, modnames = modEQ, sort = T)
+
+  AICtab <- gt(nestAIC) |> 
+    tab_header(title="AIC scores") |>
+    # tab_style(
+      # style = cell_text
+      # style = cell_text(size="small"),
+      #         locations= cells_body())
+    # )
+    tab_options(
+      # table.font.weight = "bold",
+      # was going to try setting whole table to bold and then body cells to normal
+      column_labels.font.weight = "bold"
+    )
+  return(AICtab)
+  
+}
+```
+
+
+```{r eval=FALSE, include=FALSE}
+aic_mod <- function(mods){
+  
+  # mods <- mods
   # mods[[1]]$call 
-  mods <- modsHF
+  # mods <- mods
   # if(sapply(grepl("*", ))
   # lapply(modEQ, function(x) sapply(x, grep("*")))
   # eq <- lapply(modEQ, grep, pattern="*")
@@ -1302,7 +1340,7 @@ aic_mod <- function(mods){
 ```
 
 
-```{r include=FALSE}
+```{r eval=FALSE, include=FALSE}
 # m
   r <- paste0(m[,2], " + ", m[,3], " + ", m[,2], ":", m[,3])
   # for(i in 1:length(modEQ)) if(!is.na(m[i,1])) sub(m[i,1], r[i], s) # doesn't work
@@ -1558,7 +1596,7 @@ For this first model, I have included all the output, but for subsequent models 
 resp    <- "HF_mis"
 # resp    <- "misclass"
 dataMod <- ndGLM_scl1
-modsHF  <- list()
+mods  <- list()
 ```
 
 ### Step 1: Univariate models
@@ -1567,8 +1605,8 @@ Analyze the relationship between each predictor variable and the response variab
 
 The output table below shows that some categories in the camera fate predictor have ridiculous SE/confidence intervals. I think they have too few observations. I already merged cattle into human impacts, and I could merge more categories, but the question is: 
 Is it better to have unreliable parameter estimates, or split the variable into fewer categories that are less informative, or just exclude the variable altogether?
-
-```{r echo=FALSE, warning=FALSE}
+```{r include=FALSE, warning=FALSE}
+# ```{r echo=FALSE, warning=FALSE}
 # HF_inc2021 <- univar_mod(resp, dataMod, modsum)
 u_inc2021 <- univar_mod(resp, dataMod)
 u_inc2021[1]
@@ -1582,8 +1620,8 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
 
 
-
-```{r echo=FALSE}
+```{r include=FALSE}
+# ```{r echo=FALSE}
 # HF_inc2021[2]
 # vars <- dataMod |> select(c("species", "nest_age", "cam_fate", "fdate", "obs_int"))
 ```
@@ -1641,54 +1679,57 @@ modorder <- "spp+age+fate+date+int" # just a reminder so everything is neat
 
 #### Null and full models
 
-```{r echo=FALSE, warning=FALSE}
-modsHF[[1]] <- glm(as.formula(paste0(
+```{r include=FALSE, warning=FALSE}
+# ```{r echo=FALSE, warning=FALSE}
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
   # resp,"~ species + nest_age + cfate + fdate + obs_int")), 
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsHF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[2]]) # don't assign or return anything from function bc I don't need the output
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mod_diff(mods[[1]], mods[[2]]) # don't assign or return anything from function bc I don't need the output
 
-# mDiff <- mod_diff(modsHF[[1]], modsHF[[2]])
+# mDiff <- mod_diff(mods[[1]], mods[[2]])
 # need to assign it to something or it will print the output in addition to the print statement. but assigning may disable the print statement.
 ```
 
 #### Other models
 
-```{r echo=FALSE}
-modsHF[[3]] <- glm(as.formula(paste0(
+```{r include=FALSE}
+# ```{r echo=FALSE}
+mods[[3]] <- glm(as.formula(paste0(
   resp,"~ fdate")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[3]])
+mod_diff(mods[[1]], mods[[3]])
 
-modsHF[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species")),
   resp,"~ fdate + obs_int")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[4]])
+mod_diff(mods[[1]], mods[[4]])
 
-modsHF[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
   resp,"~ species +fdate + obs_int")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[5]])
+mod_diff(mods[[1]], mods[[5]])
 
-modsHF[[6]] <- glm(as.formula(paste0(
+mods[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
   resp,"~ species + nest_age + fdate + obs_int")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[6]])
+mod_diff(mods[[1]], mods[[6]])
 ```
 
 
 #### Analysis, part 1: select main effects model
 
-```{r echo=FALSE}
-aicHF <- aic_mod(modsHF)
+```{r include=FALSE}
+# ```{r echo=FALSE}
+aicHF <- aic_mod(mods)
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
@@ -1697,70 +1738,71 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 Specify the main effects model, and compare interaction models to it.
 In this case, it's the same as the full model.
 
-```{r echo=FALSE}
+```{r include=FALSE}
+# ```{r echo=FALSE}
 
-modsHF[[7]] <- glm(as.formula(paste0(
+mods[[7]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
   resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
   # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
   data=dataMod, family=binomial)
-# mod_diff(modsHF[[1]], modsHF[[7]])
+# mod_diff(mods[[1]], mods[[7]])
 
 
-modsHF[[8]] <- glm(as.formula(paste0(
+mods[[8]] <- glm(as.formula(paste0(
   
   resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
   # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
   data=dataMod, family=binomial)
 
-# mod_diff(modsHF[[1]], modsHF[[8]])
+# mod_diff(mods[[1]], mods[[8]])
 
 
-modsHF[[9]] <- glm(as.formula(paste0(
+mods[[9]] <- glm(as.formula(paste0(
   
   resp,"~ species + nest_age * cam_fate + fdate + obs_int"
   # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
   
 )), data=dataMod, family=binomial)
 
-# mod_diff(modsHF[[1]], modsHF[[9]])
+# mod_diff(mods[[1]], mods[[9]])
 
 
-modsHF[[10]] <- glm(as.formula(paste0(
+mods[[10]] <- glm(as.formula(paste0(
   
   # resp, "~ species + obs_int + cam_fate + species * obs_int"
   resp,"~ species + nest_age + cam_fate + fdate * obs_int"
   
 )), data=dataMod, family=binomial)
 
-# mod_diff(modsHF[[1]], modsHF[[10]])
+# mod_diff(mods[[1]], mods[[10]])
 
 
-modsHF[[11]] <- glm(as.formula(paste0(
+mods[[11]] <- glm(as.formula(paste0(
   
   resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
   
 )), data=dataMod, family=binomial)
 
-# mod_diff(modsHF[[1]], modsHF[[11]])
+# mod_diff(mods[[1]], mods[[11]])
 
 
-# modsHF[[12]] <- glm(as.formula(paste0(
+# mods[[12]] <- glm(as.formula(paste0(
 #   
 #   resp, "~ species + obs_int + cam_fate + species * obs_int"
 #   
 # )), data=dataMod, family=binomial)
 # 
-# mod_diff(modsHF[[1]], modsHF[[12]])
+# mod_diff(mods[[1]], mods[[12]])
 ```
 
 
 #### Analysis
 
 ```{r echo=FALSE}
-# mods  <- modsHF[[c(7:12)]]
-mods  <- modsHF[c(1, 7:11)]
+# mods  <- mods[[c(7:12)]]
+mods  <- mods[c(1, 7:11)]
 aicHF <- aic_mod(mods)
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
@@ -1775,7 +1817,7 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```{r include=FALSE}
 resp    <- "misclass"
 dataMod <- ndGLM_scl2
-modsHF  <- list()
+mods  <- list()
 ```
 
 #### Univariate models
@@ -1816,63 +1858,107 @@ m = "main effects"
 ```
 
 ```{r warning=FALSE, include=FALSE}
-modsHF[[1]] <- glm(as.formula(paste0(
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsHF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-mod_diff(modsHF[[1]], modsHF[[2]])
+mod_diff(mods[[1]], mods[[2]])
 
 ```
 
 <!-- 2.  Other models -->
 
 ```{r include=FALSE}
-modsHF[[3]] <- glm(as.formula(paste0(
+mods[[3]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[3]])
+mod_diff(mods[[1]], mods[[3]])
 ```
 
 ```{r include=FALSE}
 
-modsHF[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[4]])
+mod_diff(mods[[1]], mods[[4]])
 ```
 
 ```{r include=FALSE}
 
-modsHF[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate + obs_int")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[5]])
+mod_diff(mods[[1]], mods[[5]])
 ```
 
 ```{r include=FALSE}
 
-modsHF[[6]] <- glm(as.formula(paste0(
+mods[[6]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   resp,"~ species + cam_fate + obs_int + fdate")),
   data=dataMod, family=binomial)
-mod_diff(modsHF[[1]], modsHF[[6]])
+mod_diff(mods[[1]], mods[[6]])
 ```
 
-<!-- 3.  Interaction models -->
+3.  Interaction models
 
 ```{r echo=FALSE}
 
+
+mods[[7]] <- glm(as.formula(paste0(
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+# mod_diff(mods[[1]], mods[[7]])
+
+
+mods[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[8]])
+
+
+mods[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[9]])
+
+
+mods[[10]] <- glm(as.formula(paste0(
+  
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[10]])
+
+
+mods[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
 ```
 
 <!-- 4.  Analysis -->
 
 ```{r echo=FALSE, message=FALSE}
-aicHF <- aic_mod(modsHF)
+aicHF <- aic_mod(mods)
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
@@ -1889,7 +1975,7 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 Choose the data and response var, create list to store models
 
 ```{r echo=FALSE}
-modsF   <- list()
+mods   <- list()
 resp    <- "misclass"
 # resp    <- "HF_mis"
 dataMod <- ndGLM_scl1[ndGLM_scl1$final_fate!=1,]
@@ -1933,57 +2019,105 @@ m = "main effects"
 ```
 
 ```{r include=FALSE}
-modsF[[1]] <- glm(as.formula(paste0(
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsF[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-mod_diff(modsF[[1]], modsF[[2]])
+mod_diff(mods[[1]], mods[[2]])
 
 ```
 
 ####  Other models
 
 ```{r include=FALSE}
-modsF[[3]] <- glm(as.formula(paste0(
+mods[[3]] <- glm(as.formula(paste0(
   # resp,"~ obs_int")),
   resp,"~ cam_fate")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 
-mod_diff(modsF[[1]], modsF[[3]])
+mod_diff(mods[[1]], mods[[3]])
 ```
 
 ```{r include=FALSE}
 
-modsF[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 
-mod_diff(modsF[[1]], modsF[[4]])
+mod_diff(mods[[1]], mods[[4]])
 ```
 
 ```{r include=FALSE}
 
-modsF[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int + fdate")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
 
-mod_diff(modsF[[1]], modsF[[5]])
+mod_diff(mods[[1]], mods[[5]])
 ```
 
-<!-- #### Interaction models -->
 
 ```{r include=FALSE}
 
-modsF[[6]] <- glm(as.formula(paste0(
+mods[[6]] <- glm(as.formula(paste0(
   resp,"~ cam_fate + obs_int + fdate + nest_age")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-mod_diff(modsF[[1]], modsF[[6]])
+mod_diff(mods[[1]], mods[[6]])
+```
+
+#### Interaction models
+```{r}
+
+
+mods[[7]] <- glm(as.formula(paste0(
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+# mod_diff(mods[[1]], mods[[7]])
+
+
+mods[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[8]])
+
+
+mods[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[9]])
+
+
+mods[[10]] <- glm(as.formula(paste0(
+  
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[10]])
+
+
+mods[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
 ```
 
 #### Analysis
@@ -1991,7 +2125,7 @@ mod_diff(modsF[[1]], modsF[[6]])
 For this analysis, because the first and second models (ranked by AIC) are so close, I would choose the model with only camera fate as the best model. I reduced the model to just cam_fate, and when I added back the next most significant variable (obs_int) the Chi-sq p-value (compared to full model) almost doubled to about 0.5. So I probably didn't need to add back the other variables, or should I do so in case they are having an effect on one of the explanatory variables?
 
 ```{r echo=FALSE}
-aicF <- aic_mod(modsF)
+aicF <- aic_mod(mods)
 filename <- save_tab(aicF)
 
 knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
@@ -2006,7 +2140,7 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 <!-- choose the data and response var, create list to store models-->
 
 ```{r include=FALSE}
-modsf   <- list()
+mods   <- list()
 resp    <- "misclass"
 dataMod <- ndGLM_scl2[ndGLM_scl2$final_fate!=1,]
 ```
@@ -2049,66 +2183,109 @@ m = "main effects"
 ```
 
 ```{r include=FALSE}
-modsf[[1]] <- glm(as.formula(paste0(
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsf[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-mod_diff(modsf[[1]], modsf[[2]])
+mod_diff(mods[[1]], mods[[2]])
 
 ```
 
 <!-- 2.  other models-->
 
 ```{r include=FALSE}
-modsf[[3]] <- glm(as.formula(paste0(
+mods[[3]] <- glm(as.formula(paste0(
   # resp, "~ obs_int + fdate"
   resp, "~ nest_age + fdate"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsf[[1]], modsf[[3]])
+mod_diff(mods[[1]], mods[[3]])
 ```
 
 ```{r include=FALSE}
-modsf[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
   resp, "~ obs_int + fdate + nest_age"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsf[[1]], modsf[[4]])
+mod_diff(mods[[1]], mods[[4]])
 ```
 
 ```{r include=FALSE}
-modsf[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
   resp, "~ cam_fate + obs_int + fdate + nest_age"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsf[[1]], modsf[[5]])
+mod_diff(mods[[1]], mods[[5]])
 ```
 
 ```{r include=FALSE}
 
-modsf[[6]] <- glm(as.formula(paste0(
+mods[[6]] <- glm(as.formula(paste0(
   resp, "~ nest_age"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsf[[1]], modsf[[6]])
+mod_diff(mods[[1]], mods[[6]])
 ```
 
 <!-- 3.  interaction models-->
 
 ```{r include=FALSE}
-# modsf[[5]] <- glm(as.formula(paste0(
+mods[[7]] <- glm(as.formula(paste0(
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+# mod_diff(mods[[1]], mods[[7]])
+
+
+mods[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[8]])
+
+
+mods[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[9]])
+
+
+mods[[10]] <- glm(as.formula(paste0(
+  
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[10]])
+
+
+mods[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
+# mods[[5]] <- glm(as.formula(paste0(
 #   resp, "~ obs_int * fdate"
 # )), data=dataMod, family=binomial)
 # 
-# mod_diff(modsf[[1]], modsf[[5]])
+# mod_diff(mods[[1]], mods[[5]])
 ```
 
 <!-- 4. analysis-->
 
 ```{r echo=FALSE}
-aicf <- aic_mod(modsf)
+aicf <- aic_mod(mods)
 filename <- save_tab(aicf)
 
 knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
@@ -2126,7 +2303,7 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 Choose the data and response var, create list to store models
 
 ```{r echo=FALSE}
-modsC   <- list()
+mods   <- list()
 resp    <- "is_u"
 dataMod <- ndGLM_scl1
 ```
@@ -2169,14 +2346,14 @@ m = "main effects"
 ```
 
 ```{r include=FALSE}
-modsC[[1]] <- glm(as.formula(paste0(
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")), 
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsC[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
-anova(modsC[[1]], modsC[[2]], test="LRT")
-# mod_diff(modsC[[1]], modsC[[2]])
+anova(mods[[1]], mods[[2]], test="LRT")
+# mod_diff(mods[[1]], mods[[2]])
 
 ```
 
@@ -2184,51 +2361,43 @@ anova(modsC[[1]], modsC[[2]], test="LRT")
 
 ```{r include=FALSE}
 # significant or close to significant in univariate models
-modsC[[3]] <- glm(as.formula(paste0(
+mods[[3]] <- glm(as.formula(paste0(
   # resp, "~ species + nest_age"
   resp, "~ nest_age"
 )), data=dataMod, family=binomial)
-mod_diff(modsC[[1]], modsC[[3]])
+mod_diff(mods[[1]], mods[[3]])
 
-```
-
-```{r include=FALSE}
 # add next most significant variable
-modsC[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
   # resp, "~ species + nest_age + obs_int"
   # resp, "~ species + nest_age + fdate"
   resp, "~ species + nest_age"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC[[1]], modsC[[4]])
+mod_diff(mods[[1]], mods[[4]])
 
-```
-
-```{r include=FALSE}
 # and next
-modsC[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age + fdate"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC[[1]], modsC[[5]])
+mod_diff(mods[[1]], mods[[5]])
 
-```
 
-```{r include=FALSE}
-
-modsC[[6]] <- glm(as.formula(paste0(
+mods[[6]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age + fdate + obs_int"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC[[1]], modsC[[6]])
+mod_diff(mods[[1]], mods[[6]])
 ```
 
 
 #### Analysis 1: main effects model
 
-```{r echo=FALSE}
-oddRat <- odd_rat(modsC)
-aicTab <- aic_mod(modsC)
+```{r include=FALSE}
+# ```{r echo=FALSE}
+oddRat <- odd_rat(mods)
+aicTab <- aic_mod(mods)
 # aicTab
 
 filename <- save_tab(aicTab)
@@ -2242,30 +2411,77 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 Specify chosen main effects model, compare to proposed interaction models
 ```{r include=FALSE}
 
-# modsC[[7]] <- glm(as.formula(paste0(
+mods[[7]] <- glm(as.formula(paste0(
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+# mod_diff(mods[[1]], mods[[7]])
+
+
+mods[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[8]])
+
+
+mods[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[9]])
+
+
+mods[[10]] <- glm(as.formula(paste0(
+  
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[10]])
+
+
+mods[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
+```
+
+```{r eval=FALSE, include=FALSE}
+
+# mods[[7]] <- glm(as.formula(paste0(
 #   resp, "~ species + nest_age + fdate" 
 # )), data=dataMod, family=binomial)
 # actually, compare to the main effects model as specified above (model 5) so it doesn't print twice
 
-modsC[[7]] <- glm(as.formula(paste0(
+mods[[7]] <- glm(as.formula(paste0(
   resp, "~ species * nest_age + fdate" 
 )), data=dataMod, family=binomial)
 
 
-modsC[[8]] <- glm(as.formula(paste0(
+mods[[8]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age * fdate" 
 )), data=dataMod, family=binomial)
 
 
-mod_diff(modsC[[5]], modsC[[7]])
-mod_diff(modsC[[5]], modsC[[8]])
+mod_diff(mods[[5]], mods[[7]])
+mod_diff(mods[[5]], mods[[8]])
 ```
 
 #### Analysis 2: including interaction models
 
 ```{r echo=FALSE}
-# oddRat <- odd_rat(modsC)
-aicTab <- aic_mod(modsC)
+# oddRat <- odd_rat(mods)
+aicTab <- aic_mod(mods)
 # aicTab
 
 filename <- save_tab(aicTab)
@@ -2282,7 +2498,7 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 <!-- Choose the data and response var, create list to store models -->
 
 ```{r echo=FALSE}
-modsC2   <- list()
+mods   <- list()
 resp    <- "is_u"
 dataMod <- ndGLM_scl2
 ```
@@ -2324,55 +2540,105 @@ m = "main effects"
 <!-- 1.  Null and full models -->
 
 ```{r include=FALSE}
-modsC2[[1]] <- glm(as.formula(paste0(
+# mods[[1]] <- glm(as.formula(paste0(
+mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning
 
-modsC2[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
+mods[[2]] <- glm(as.formula(paste0(resp,"~ 1")), data=dataMod, family=binomial)
 
 # cat("\n\n")
-mod_diff(modsC2[[1]], modsC2[[2]])
+mod_diff(mods[[1]], mods[[2]])
 
 ```
 
 <!-- 2.  Other models -->
 
 ```{r include=FALSE}
-modsC2[[3]] <- glm(as.formula(paste0(
+mods[[3]] <- glm(as.formula(paste0(
 
   resp, "~ nest_age"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC2[[1]], modsC2[[3]])
+mod_diff(mods[[1]], mods[[3]])
 
-```
 
-```{r include=FALSE}
-
-modsC2[[4]] <- glm(as.formula(paste0(
+mods[[4]] <- glm(as.formula(paste0(
 
   resp, "~ nest_age + species"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC2[[1]], modsC2[[4]])
-```
-```{r include=FALSE}
+mod_diff(mods[[1]], mods[[4]])
 
-modsC2[[5]] <- glm(as.formula(paste0(
+mods[[5]] <- glm(as.formula(paste0(
 
   resp, "~ nest_age + species + fdate"
 )), data=dataMod, family=binomial)
 
-mod_diff(modsC2[[1]], modsC2[[5]])
+mod_diff(mods[[1]], mods[[5]])
+
+
+mods[[6]] <- glm(as.formula(paste0(
+
+  resp, "~ nest_age + species + fdate + cam_fate"
+)), data=dataMod, family=binomial)
+
+mod_diff(mods[[1]], mods[[6]])
 ```
 
 <!-- 3.  Interaction models -->
+```{r}
+
+mods[[7]] <- glm(as.formula(paste0(
+  # resp,"~ fdate")),
+  # resp,"~ species + obs_int + cam_fate")),
+  resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
+  # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
+  data=dataMod, family=binomial)
+# mod_diff(mods[[1]], mods[[7]])
+
+
+mods[[8]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age + cam_fate * fdate + obs_int")),
+  # resp,"~ species + nest_age + cam_fate + fdate * obs_int")),
+  data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[8]])
+
+
+mods[[9]] <- glm(as.formula(paste0(
+  
+  resp,"~ species + nest_age * cam_fate + fdate + obs_int"
+  # resp, "~ species + obs_int + cam_fate + fdate * nest_age"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[9]])
+
+
+mods[[10]] <- glm(as.formula(paste0(
+  
+  # resp, "~ species + obs_int + cam_fate + species * obs_int"
+  resp,"~ species + nest_age + cam_fate + fdate * obs_int"
+  
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[1]], mods[[10]])
+
+
+mods[[11]] <- glm(as.formula(paste0(
+  
+  resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
+  
+)), data=dataMod, family=binomial)
+```
 
 <!-- 4.  Analysis -->
 
 ```{r echo=FALSE}
 
-aicC <- aic_mod(modsC2) # modsC definitely has 3 items, so why 5 names?
+aicC <- aic_mod(mods) # mods definitely has 3 items, so why 5 names?
 fn <- save_tab(aicC)
 
 # knitr::include_graphics(paste0("analysis/", fn), dpi=(1566/6))
@@ -2441,6 +2707,9 @@ modsU[[3]] <- glm(as.formula(paste0(
 anova(modsU[[1]], modsU[[3]], test="LRT")
 
 mod_diff(modsU[[1]], modsU[[3]])
+```
+```{r}
+
 ```
 
 <!-- #### Analysis -->

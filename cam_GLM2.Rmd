@@ -30,6 +30,8 @@ while (!is.null(dev.list()))  dev.off()
 # changing the dpi argument in knitr::include_graphics is the only thing that worked to change image output size
 # always turn off chunks before commenting out code or deleting
 # Also remember that comments in the text sections have open and close characters
+# 
+# # str_view is very helpful for understanding regex
 ```
 
 ```{r setup, include=FALSE}
@@ -1119,11 +1121,6 @@ aic_mod <- function(mods){
   # mods <- modsF
   # mods[[1]]$call 
   mods <- modsHF
-  modEQ <- paste(sapply(mods,  
-                        # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
-                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
-                        ), sep = " ")
-  modEQ
   # if(sapply(grepl("*", ))
   # lapply(modEQ, function(x) sapply(x, grep("*")))
   # eq <- lapply(modEQ, grep, pattern="*")
@@ -1143,12 +1140,24 @@ aic_mod <- function(mods){
   # m <-paste0( str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)")[,1], collapse="|")
   # I don't think collapsing the strings helps me. 
   
-  m <- gsub(" ", "\\\\s", str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") )
-  m
-  
-  m[,1]
+  modEQ <- paste(sapply(mods,  
+                        # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
+                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
+                        ), sep = " ")
+  modEQ
+  # m <- gsub(" ", "\\\\s", str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") )
+  m <- str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)" )
+  # n <- gsub(" ", "\\\\s", str_match(modEQ, "(\\w+)\\s\\*\\s(\\w+)") )
+  # n
+  p <- paste(m[,1], sep="|", collapse="|") # this grabs the correct strings
+  p <- gsub(" ", "\\\\s", p)
+  p <- gsub("\\*", "\\\\*", p)
+  # m[,1]
   # this function operates on each instance of the pattern separately
   r <- function(eq) {
+    # eq = "species * obs_int"
+    r = which(m[,1] %in% eq)
+    paste0(m[r,2]," + ",m[r,3]," + ",m[r,2],":",m[r,3])
     # browser()
     # t <- m[11,1]
     # m <- str_match(modEQ, eq)
@@ -1161,19 +1170,63 @@ aic_mod <- function(mods){
     # r = m[,1][which(m[,1]==eq)] # this isn't doing anything period
     # r = which(m[,1]==eq) # this isn't doing anything period
     # r = which(grep(eq, )) # this isn't doing anything period
-    r = which(m[,1] %in% eq)
     # r = which(match(eq, m[,1])) # arg to which is not logical
     # r = which(eq %in% m[,1]) # r still empty
     # want the row index
-    paste0(m[r,2]," + ",m[r,3]," + ",m[r,2],":",m[r,3])
     
   }
-  p <- r("species * obs_int") # r creates the proper replacement...
-  # but it still isn't substituted in properly
   
+  str_replace(modEQ, p, r) # still doesn't work w/o spaces
+  f <- r("species * obs_int")
+  h <- r("species*obs_int") # r creates the proper replacement...
+  # but it still isn't substituted in properly
+  # not creating the proper replacement anymore... no words, just operators D:
+  # still the same w/o the spaces - actually now it's working?
+  
+  p <- paste(m[,1], sep="|", collapse="|") # this grabs the correct strings
   p <-paste0("\\b", m[,1], "\\b", collapse="|")
+  # creates one long string, but not a character vector
+  # but that's how "colours" is in the example...
   p
   
+  modEQ1 <- paste(sapply(mods,  
+                        # function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
+                        function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=\")")
+                        ), sep = " ")
+  
+  # this works but the spaces are wonky:
+  # # (turns out I don't need to delete them)
+  modEQ1 <- gsub(" ", "", modEQ)
+  modEQ1
+  # modEQ <- gsub("\\*", "\\\\*", modEQ)
+  # modEQ
+  m <- str_match(modEQ1, "(\\w+)\\*(\\w+)" )
+  
+  p <-paste0("\\b", m[,1], "\\b", collapse="|")
+  p <- gsub("\\*", "\\\\*", p)
+  p
+  str_replace(modEQ1, p, r) # still doesn't work w/o spaces
+  str_replace(modEQ1, p, r )
+  
+  str_extract_all(modEQ, p)
+  str_extract_all(x, colours) 
+  # str_view(modEQ, "\\bspecies*obs_int\\b")
+  str_view(modEQ, "species\\*obs_int") # so maybe I just need to properly escape the *?
+  str_view(modEQ, "s")
+  
+  str_replace(modEQ, m, r )
+  str_replace(modEQ, n[,1], r )
+  # string recycling error, fml 
+  
+  # what if we took out all the spaces first, then added them back in if need be?
+  
+  str_replace(modEQ, m[,1], r )
+  # still doesn't work
+  str_replace(modEQ, 
+              paste0("\\b",m[,1],"\\b", collapse="|"), 
+              r )
+  str_replace_all(modEQ, p, r)
+  modEQ
   
   # with this one, for some reason, r becomes 1 when it's which(eq %in% m[,1])
   # p <- r(modEQ[11]) # this is not the correct argument - it's the whole string, not the substring we're looking for
@@ -1199,15 +1252,6 @@ aic_mod <- function(mods){
   # r <- paste0
   # so what is this function actually acting on?
   # 
-  str_replace(modEQ, m, r )
-  # string recycling error, fml 
-  str_replace(modEQ, m[,1], r )
-  # still doesn't work
-  str_replace(modEQ, 
-              paste0("\\b",m[,1],"\\b", collapse="|"), 
-              r )
-  str_replace_all(modEQ, p, r)
-  modEQ
   # p <-str_c("\\b", m[,1], "\\b", collapse="|")
   # n <- !is.na(m)
   # for(i in 1:length(modEQ)){

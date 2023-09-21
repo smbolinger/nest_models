@@ -105,7 +105,7 @@ Run the models:
 
 # \* \* PREPARE THE DATA \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-## Read in the data.
+<!-- ## Read in the data. -->
 
 ```{r include=FALSE}
 
@@ -122,14 +122,14 @@ nestData <- nestData |>  # yet another new column
 
 ```
 
-## Data wrangling
+<!-- ## Data wrangling -->
 
-First, we will select only the nests with cameras, because the
-response variable is fate misclassification (difference between camera
-and field fate).
+<!-- First, we will select only the nests with cameras, because the -->
+<!-- response variable is fate misclassification (difference between camera -->
+<!-- and field fate). -->
 
-We then reduce back to one row per nest by condensing the observation
-history to one cell.
+<!-- We then reduce back to one row per nest by condensing the observation -->
+<!-- history to one cell. -->
 
 ```{r message=FALSE}
 # somewhere in here, obs_int becomes 0 for all rows
@@ -175,62 +175,6 @@ allNA <- union(allNA, nest_ageNA) # 53 total nests to exclude-that's about a thi
 ```
 
 
-```{r eval=FALSE, message=FALSE, include=FALSE}
-# ndGLM$k[ndGLM$nest==30935] = 87
-ndGLM$k[ndGLM$nest==30935] = 77 # subtract 10
-ndGLM$k[ndGLM$nest==30934] = 74
-ndGLM$k[ndGLM$nest==30959] = 81 
-ndGLM$k[ndGLM$nest==20305] = 61
-ndGLM$k[ndGLM$nest==10242] = 40
-# ndGLM$k[ndGLM$nest==]
-
-ndGLM$nest_age[ndGLM$nest==10242] = 10
-ndGLM$nest_age[ndGLM$nest==20305] = 16
-ndGLM$nest_age[ndGLM$nest==30935] = 16
-ndGLM$nest_age[ndGLM$nest==30959] = 16
-
-ndGLM$cam_fate[ndGLM$nest==30909] = 2
-ndGLM$cam_fate[ndGLM$nest==30914] = 0
-ndGLM$cam_fate[ndGLM$nest==30916] = 0
-ndGLM$cam_fate[ndGLM$nest==30933] = 1
-ndGLM$cam_fate[ndGLM$nest==30934] = 0
-ndGLM$cam_fate[ndGLM$nest==30420] = 0
-ndGLM$cam_fate[ndGLM$nest==30301] = 1
-ndGLM$cam_fate[ndGLM$nest==30903] = 0
-ndGLM$cam_fate[ndGLM$nest==30906] = 0
-ndGLM$cam_fate[ndGLM$nest==30910] = 0
-ndGLM$cam_fate[ndGLM$nest==30931] = 5
-ndGLM$cam_fate[ndGLM$nest==30932] = 1
-# ndGLM$cam_fate[ndGLM$nest==30909] = 2
-
-
-```
-```{r}
- # mutate(final_fate = case_match(final_fate,
- #                                 "H"   ~ 1, 
- #                                 "F"   ~ 0, 
- #                                 "F-A" ~ 0,
- #                                 "D"   ~ 2,
- #                                 "D-A" ~ 2,
- #                                 "S"   ~ 3,
- #                                 "A"   ~ 4,
- #                                 "Hu"  ~ 5,
- #                                 "Ca"  ~ 6,
- #                                 "U"   ~ 7,
- #                                 "U?"  ~ 7,
- #                                 "U-H" ~ 8
- #         ),
- #         
- #         cam_fate = case_match(cam_fate,
- #                               "H"  ~ 1, 
- #                               "F"  ~ 0, 
- #                               "D"  ~ 2,
- #                               "S"  ~ 3,
- #                               "A"  ~ 4,
- #                               "Hu" ~ 5,
- #                               "Ca" ~ 6,
- #                               "U"  ~ 7
-```
 
 ```{r message=FALSE}
 table(ndGLM$species)
@@ -245,9 +189,9 @@ table(ndGLM$cfate)
  
 ```
 
-## Add variables representing misclassification.
+<!-- ## Add variables representing misclassification. -->
 
--   Combine some levels of the cam_fate variable and make sure it's coded as a factor with correct number of levels.
+<!-- -   Combine some levels of the cam_fate variable and make sure it's coded as a factor with correct number of levels. -->
 
 ```{r}
 # need to change both the numeric and letter versions of camera fate var
@@ -274,7 +218,7 @@ sum(is.na(ndGLM$cfate))
 #   evidence and successful by camera
 ```
 
--   Create functions to label nests as misclassified or not.
+<!-- -   Create functions to label nests as misclassified or not. -->
 
 ```{r}
 howMis <- function(fate, c_fate){
@@ -287,11 +231,11 @@ howMis <- function(fate, c_fate){
 }
 ```
 
--   Variable for nest misclassification based on hatch or fail, not
-    multiple failure causes.
+<!-- -   Variable for nest misclassification based on hatch or fail, not -->
+<!--     multiple failure causes. -->
 
-Where does unknown fate fit into this? In one paper, they had a third
-category, but could it just be misclassified?
+<!-- Where does unknown fate fit into this? In one paper, they had a third -->
+<!-- category, but could it just be misclassified? -->
 
 ```{r}
 ndGLM <- ndGLM %>% 
@@ -341,10 +285,10 @@ fates <- ndGLM %>%
 
 ```
 
--   Variable for nest misclassification including all fate categories.
+<!-- -   Variable for nest misclassification including all fate categories. -->
 
--   Variable for how the nest was misclassified (correct, newly assigned
-    from unknown, incorrect)
+<!-- -   Variable for how the nest was misclassified (correct, newly assigned -->
+<!--     from unknown, incorrect) -->
 
 ```{r}
 ndGLM <- ndGLM %>% 
@@ -366,7 +310,7 @@ ndGLM <- ndGLM %>%
 # ndGLM$how_mis
 ```
 
--   Visually inspect new fate categories for discrepancies.
+<!-- -   Visually inspect new fate categories for discrepancies. -->
 
 ```{r message=FALSE}
 
@@ -378,7 +322,7 @@ fates2 <- ndGLM %>%
 table(ndGLM$cam_fate)
 ```
 
--   Create new variable (1/0), assigned fate in field or not
+<!-- -   Create new variable (1/0), assigned fate in field or not -->
 
 ```{r include=FALSE}
 isU <- function(fate) ifelse(fate %in% c(7:9), 1, 0)
@@ -387,10 +331,10 @@ isU <- function(fate) ifelse(fate %in% c(7:9), 1, 0)
 
 ```
 
-## Examine data; find and remove missing values (NA).
+<!-- ## Examine data; find and remove missing values (NA). -->
 
--   Ungroup dataframe and make categorical variables into factors;
-    make sure other data classes are correct
+<!-- -   Ungroup dataframe and make categorical variables into factors; -->
+<!--     make sure other data classes are correct -->
 
 ```{r}
 ndGLM_ <- as.data.frame(ndGLM) # make into a regular df (not grouped)
@@ -415,65 +359,6 @@ ndGLM_ <- ndGLM_ |> mutate(is_u = isU(final_fate)) |>
   ))
 ```
 
-```{r}
-# cat("Categorical predictor variables:\n")
-# table(ndGLM_$species)
-# ndGLM_ |>
-#   group_by(cam_fate) |>
-#   summarize(freq=n()) |>
-#   mutate(across(c(cam_fate, freq), as.numeric)) |>
-#   t() |>
-#   prmatrix(collab=rep(" ",8))
-
-# table(ndGLM_$species, ndGLM_$HF_mis)
-
-# cat("\n\nPossible response variables:")
-
-# res <- ndGLM_ |> tbl_summary(include=c(is_u, HF_mis, misclass),
-                             # label=list(is_u ~ "Unknown in field",
-                                        # HF_mis ~ "Misclassified (H/F)",
-                                        # misclass ~ "Misclassified (all fates)"))
-
-# cat("Continuous predictor variables:\n")
-# # ndGLM_ |> group_by(obs_int, nest_age) |> summarize(freq = n())
-# # obs <- ndGLM_ |> 
-# ndGLM_ |> 
-#   group_by(obs_int) |> 
-#   summarize(freq=n()) |> 
-#   t() |> 
-#   prmatrix(collab=rep(" ",13))
-# 
-# ndGLM_ |> 
-#   group_by(fate_date) |> 
-#   summarize(freq=n()) |> 
-#   t() |> 
-#   prmatrix(collab=rep(" ",55))
-# 
-# ndGLM_ |> 
-#   group_by(obs_int) |> 
-#   summarize(freq=n()) |> 
-#   t() |> 
-#   prmatrix(collab=rep(" ",13))
-#|> as.matrix(dimnames=NULL)
-# colnames(obs) =NULL
-# ndGLM_ |> table(obs_int)
-# 
-# 
-
-# for freq tables, frq function is one option
-# # but others make them look nicer
-
-# cat("\n\nPossible response variables:")
-# cat("\n\t\t\t\t\t\t no yes")
-# 
-# # cat("------------------------------------------------------------")
-# cat("\nwas nest fate unknown in the field? \t\t", table(ndGLM_$is_u))
-# cat("\nwas the nest misclassified in the field? \t", table(ndGLM_$misclass))
-# cat("\nwas nest misclassified? (hatch/fail only) \t", table(ndGLM_$HF_mis),"\n\n\n")
-# 
-# cat("All unknowns:\n\n")
-# sapply(ndGLM_, function(x) sum(is.na(x)))
-```
 
 -   Examine and remove missing data (NA) for relevant variables
 
@@ -681,9 +566,6 @@ knitr::include_graphics(paste0("analysis/", filename),
 #################################################################################
 ```
 
-```{r echo=FALSE, message=FALSE, fig.dim=c(6,4)}
-# fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis, k)
-```
 
 ## Excluding 2021
 
@@ -720,15 +602,15 @@ knitr::include_graphics(paste0("analysis/",filename),
 
 # \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-## HISTOGRAMS
+<!-- ## HISTOGRAMS -->
 
-Plot the distributions of each continuous predictor with and without
-2021 data. Make sure the bin sizes make sense.
+<!-- Plot the distributions of each continuous predictor with and without -->
+<!-- 2021 data. Make sure the bin sizes make sense. -->
 
-### First, create a function that makes the plots.
+<!-- ### First, create a function that makes the plots. -->
 
--   Can change response variable / data for the plot without having to
-    copy-paste and edit
+<!-- -   Can change response variable / data for the plot without having to -->
+<!--     copy-paste and edit -->
 
 ```{r include=FALSE}
 
@@ -815,10 +697,9 @@ plot_var <- function(resp, dat, label1, label2){
 }
 ```
 
-<!-- ### First analysis: hatch/fail misclassification -->
-### Nest fate misclassification
+<!-- ### Nest fate misclassification -->
 
--   Ends up with NAs for nests w/ unknown fate in the field
+<!-- -   Ends up with NAs for nests w/ unknown fate in the field -->
 
 ```{r eval=FALSE, fig.dim=c(6,3), message=FALSE, include=FALSE}
 # plot_var("HF_mis", ndGLM1, "Misclassified", "Correctly classified")
@@ -827,37 +708,19 @@ plot_var("misclass", ndGLM1, "Misclassified", "Correctly classified")
 plot_var("misclass", ndGLM2, "Misclassified", "Correctly classified")
 ```
 
-<!-- ### Second analysis: if failed, correct or not -->
 
-<!-- ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)} -->
-<!-- ndGLM_f <- ndGLM1[ndGLM1$c_hatchfail != 1,] -->
-<!-- # plot_var( "how_mis", ndGLM1[ndGLM1$c_hatchfail != 1,]) -->
-<!-- plot_var( "HF_mis", ndGLM1[ndGLM1$c_hatchfail != 1,], "Missclassified", "Correctly classified") -->
-<!-- ``` -->
-
-<!-- ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)} -->
-<!-- ndGLM_f2 <- ndGLM2[ndGLM2$c_hatchfail != 1,] -->
-<!-- plot_var( "HF_mis", ndGLM2[ndGLM2$c_hatchfail != 1,], "Missclassified", "Correctly classified") -->
-<!-- ``` -->
-
-<!-- ### Third analysis: assigned vs unknown -->
-### Assigned vs unknown
+<!-- ### Assigned vs unknown -->
 
 ```{r eval=FALSE, fig.dim=c(6,3), message=FALSE, include=FALSE}
 plot_var("is_u", ndGLM1, "Unknown", "Assigned")
 plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 ```
 
-<!-- ### Fourth analysis: if assigned, correct or not -->
-
-<!-- ```{r echo=FALSE, message=FALSE, fig.dim=c(6,3)} -->
 
 
-<!-- ``` -->
+<!-- ## CORRELATION PLOTS -->
 
-## CORRELATION PLOTS
-
--   Check for correlation amongst continuous predictors
+<!-- -   Check for correlation amongst continuous predictors -->
 
 <!-- -   With and without 2021 data -->
 
@@ -871,7 +734,7 @@ dat2 <- ndGLM2
 label_ <- function(y) max(dat[[y]]) * 0.8
 ```
 
-### Fate date vs obs int
+<!-- ### Fate date vs obs int -->
 
 ```{r eval=FALSE, fig.dim=c(6,4), warning=FALSE, include=FALSE}
 # ```{r echo=FALSE, warning=FALSE, out.width="75%"}
@@ -901,7 +764,7 @@ ggplot(dat2, aes(x=fdate, y=obs_int)) +
   theme(plot.background = element_rect(color="#cccccc", linewidth=1 ))
 ```
 
-### Nest age vs fate date
+<!-- ### Nest age vs fate date -->
 
 ```{r eval=FALSE, fig.dim=c(6,4), include=FALSE}
 ggplot(dat, aes(x=nest_age, y=fdate)) +
@@ -928,7 +791,7 @@ ggplot(dat2, aes(x=nest_age, y=fdate)) +
 
 ```
 
-### Nest age vs obs int
+<!-- ### Nest age vs obs int -->
 
 ```{r eval=FALSE, fig.dim=c(6,4), include=FALSE}
 ggplot(dat, aes(x=nest_age, y=obs_int)) +
@@ -960,8 +823,8 @@ ggplot(dat2, aes(x=nest_age, y=obs_int)) +
 
 ## FUNCTIONS
 
-Make a univariate model from each predictor variable.\
-Print the summaries of all univariate models
+<!-- Make a univariate model from each predictor variable.\ -->
+<!-- Print the summaries of all univariate models -->
 
 <!-- (should I add ANOVA for each as well?) -->
 
@@ -1022,7 +885,7 @@ univar_mod <- function(resp, modData ){ # not sure how to return one or the othe
 # nm(resp)
 ```
 
-Compare coefficients of any 2 different models
+<!-- Compare coefficients of any 2 different models -->
 
 ```{r include=FALSE}
 
@@ -1045,7 +908,7 @@ mod_diff <- function(mFull, mAlt, modtype){ # argument order matters - names sho
 
 ```
 
-Generate odds ratios
+<!-- Generate odds ratios -->
 
 ```{r include=FALSE}
 odd_rat <- function(mods){
@@ -1055,7 +918,7 @@ odd_rat <- function(mods){
 }
 ```
 
-Calculate AIC and BIC
+<!-- Calculate AIC and BIC -->
 
 ```{r eval=FALSE, include=FALSE}
 # dp <- function(x) deparse(x, width.cutoff=150)
@@ -1127,7 +990,7 @@ aic_mod <- function(mods){
 ```
 
 
-Create combo AIC/BIC tables
+<!-- Create combo AIC/BIC tables -->
 
 ```{r eval=FALSE, include=FALSE}
 delta_tab <- function(nestAIC, nestBIC){
@@ -1167,7 +1030,7 @@ full_tab <- function(nestAIC, nestBIC){
 #as_word(BICtab) # output I don't know how to use
 ```
 
-Save tables to file
+<!-- Save tables to file -->
 
 ```{r include=FALSE}
 # Input DPI for gt table AIC table output:
@@ -1233,7 +1096,7 @@ Response: HF_mis
 
 For this first model, I have included all the output, but for subsequent models I have included only a table summary of the univariate models and an AIC table for all models evaluated. I can easily have R print all the output for all models if something warrants further attention.
 
-### Initialize - Choose the data and response var, create list to store models.
+<!-- ### Initialize - Choose the data and response var, create list to store models. -->
 
 ```{r}
 resp    <- "HF_mis"
@@ -1282,7 +1145,7 @@ m = "main effects"
 modorder <- "spp+age+fate+date+int" # just a reminder so everything is neat
 ```
 
-#### Null and full models
+<!-- #### Null and full models -->
 
 ```{r include=FALSE, warning=FALSE}
 # ```{r echo=FALSE, warning=FALSE}
@@ -1298,7 +1161,7 @@ mod_diff(mods[[1]], mods[[2]]) # don't assign or return anything from function b
 # need to assign it to something or it will print the output in addition to the print statement. but assigning may disable the print statement.
 ```
 
-#### Other models
+<!-- #### Other models -->
 
 ```{r include=FALSE}
 # ```{r echo=FALSE}
@@ -1330,7 +1193,7 @@ mod_diff(mods[[1]], mods[[6]])
 ```
 
 
-#### Analysis, part 1: select main effects model
+<!-- #### Analysis, part 1: select main effects model -->
 
 ```{r include=FALSE}
 # ```{r echo=FALSE}
@@ -1339,9 +1202,9 @@ filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
 
-#### Interaction models
-Specify the main effects model, and compare interaction models to it.
-In this case, it's the same as the full model.
+<!-- #### Interaction models -->
+<!-- Specify the main effects model, and compare interaction models to it. -->
+<!-- In this case, it's the same as the full model. -->
 
 ```{r include=FALSE}
 # ```{r echo=FALSE}
@@ -1404,7 +1267,7 @@ mods[[11]] <- glm(as.formula(paste0(
 ```
 
 
-#### Analysis
+<!-- #### Analysis -->
 
 ```{r echo=FALSE}
 # mods  <- mods[[c(7:12)]]
@@ -1489,7 +1352,7 @@ mods[[6]] <- glm(as.formula(paste0(
 mod_diff(mods[[1]], mods[[6]])
 ```
 
-3.  Interaction models
+<!-- 3.  Interaction models -->
 
 ```{r echo=FALSE}
 
@@ -1600,7 +1463,7 @@ mod_diff(mods[[1]], mods[[2]])
 
 ```
 
-####  Other models
+<!-- ####  Other models -->
 
 ```{r include=FALSE}
 mods[[3]] <- glm(as.formula(paste0(
@@ -1632,7 +1495,7 @@ mods[[6]] <- glm(as.formula(paste0(
 mod_diff(mods[[1]], mods[[6]])
 ```
 
-#### Interaction models
+<!-- #### Interaction models -->
 ```{r, include=FALSE}
 
 
@@ -1771,6 +1634,7 @@ mod_diff(mods[[1]], mods[[6]])
 <!-- 3.  interaction models-->
 
 ```{r include=FALSE}
+
 mods[[7]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
@@ -1863,9 +1727,9 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 ```
 
 
-### Models
+### Multivariate models
 
-#### Null and full models
+<!-- #### Null and full models -->
 ```{r}
 
 m = "main effects"
@@ -1883,7 +1747,7 @@ anova(mods[[1]], mods[[2]], test="LRT")
 
 ```
 
-#### Other models
+<!-- #### Other models -->
 
 ```{r include=FALSE}
 # significant or close to significant in univariate models
@@ -1918,7 +1782,7 @@ mod_diff(mods[[1]], mods[[6]])
 ```
 
 
-#### Analysis 1: main effects model
+<!-- #### Analysis 1: main effects model -->
 
 ```{r include=FALSE}
 # ```{r echo=FALSE}
@@ -1932,9 +1796,9 @@ knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
 
 ```
 
-####  Interaction models
+<!-- ####  Interaction models -->
 
-Specify chosen main effects model, compare to proposed interaction models
+<!-- Specify chosen main effects model, compare to proposed interaction models -->
 ```{r include=FALSE}
 
 mods[[7]] <- glm(as.formula(paste0(

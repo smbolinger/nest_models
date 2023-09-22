@@ -81,9 +81,9 @@ numbers the same length)
 ```{r}
 # #filename <- 'nestdata2017_SMD.csv'
 # filename21 <- '2021_nests_3.csv'
-filename21 <- '2021_nests_.csv'
-filename20 <- '2020_nests_.csv'
-filename19 <- '2019_nests_.csv'
+filename21 <- 'nest_data/2021_nests_.csv'
+filename20 <- 'nest_data/2020_nests_.csv'
+filename19 <- 'nest_data/2019_nests_.csv'
 
 # there is a more elegant way to do this with dplyr, but oh well
 # make all vars character so that bind_rows() will work

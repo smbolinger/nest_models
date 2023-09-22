@@ -1,13 +1,13 @@
 ---
 title: "CameraGLM"
 output:
+  word_document:
+    reference_docx: "cam_GLM_templ.docx"
+  html_document: default
   pdf_document: default
     # fig.width: 6
     # fig.height: 4
     # highlight: pygments
-  html_document: default
-  word_document:
-    reference_docx: "cam_GLM_templ.docx"
 date: "2023-08-30"
 editor_options:
   markdown:
@@ -155,24 +155,6 @@ ndGLM <- ndGLM %>%
 ndGLM$fdate <- ndGLM$k
 ```
 
-```{r eval=FALSE, message=FALSE, include=FALSE}
-# ndGLM$k <- as.numeric(ndGLM$k) + 3 # add 3 if not re-running clean_format.R
-camFateNA    <- ndGLM$nest[which(is.na(ndGLM$cam_fate))]  # 44 total
-# ndGLM$nest[which(is.na(ndGLM$cam_fate))]
-# fate_dateNA  <- ndGLM$nest[which(is.na(ndGLM$fate_date))] # 50 total
-fdateNA      <- ndGLM$nest[which(is.na(ndGLM$k))]
-# is fate date when fate was assigned, or when fate occurred?
-# estHD_NA <- ndGLM$nest[which(is.na(ndGLM$))]
-
-nest_ageNA   <- ndGLM$nest[which(is.na(ndGLM$nest_age))]  # 66 total
-# now 52
-# 2019: 7,  2020: 4,  2021: 25
-# not adding up
-# allNA <- union(camFateNA, fate_dateNA)
-allNA <- union(camFateNA, fdateNA) # changing to k doesn't reduce # NAs D:
-# reduced to 36, but goes back to 48 when you add nest_age NA
-allNA <- union(allNA, nest_ageNA) # 53 total nests to exclude-that's about a third
-```
 
 
 
@@ -181,11 +163,6 @@ table(ndGLM$species)
 # ndGLM <- ndGLM %>% count(species)
 table(ndGLM$site)
 table(ndGLM$year)
-# missing some from 2019????
-# ndGLM$nest[which(ndGLM$year=="2019")]
-# I think I'm just going crazy
-table(ndGLM$cfate)
-# table(ndGLM$cam_fate)
  
 ```
 
@@ -258,11 +235,9 @@ ndGLM <- ndGLM %>%
   mutate(c_hatchfail = case_when(
     cam_fate %in% c(0, 2:6) ~ 0,
     cam_fate == 1           ~ 1,
-    cam_fate == 7           ~ 7,  # hopefully not many/any of either of these
-    #cam_fate == NA          ~ 7   # this one doesn't work - oh duh
+    cam_fate == 7           ~ 7,  # hopefully not many/any of these
     # is.na(cam_fate)         ~ 7
-    is.na(cam_fate)         ~ 7
-    # remove cam_fate == 7?
+    is.na(cam_fate)         ~ NA 
   ))
 
 table(ndGLM$c_hatchfail)
@@ -272,10 +247,14 @@ table(ndGLM$c_hatchfail)
 ndGLM <- ndGLM %>% 
   mutate(HF_mis = case_when(
     # c_hatchfail == 7 | hatchfail == 7 ~ NA,
-    hatchfail   == 7 & c_hatchfail != 7 ~ 1, # nest was misclassified
-    c_hatchfail == hatchfail ~ 0, # nest wasn't misclassified
-    c_hatchfail != hatchfail ~ 1  # nest was misclassified
+    # hatchfail   == 7 & c_hatchfail != 7 ~ 1, # nest was misclassified
+    
+    c_hatchfail == 7         ~ NA, # if cam fate=unknown, don't know misclass. or not
+    c_hatchfail == hatchfail ~ 0,  # nest wasn't misclassified
+    c_hatchfail != hatchfail ~ 1   # nest was misclassified
   )) #%>%
+
+table(ndGLM$HF_mis)
 ```
 
 ```{r message=FALSE}
@@ -312,13 +291,14 @@ ndGLM <- ndGLM %>%
 
 <!-- -   Visually inspect new fate categories for discrepancies. -->
 
-```{r message=FALSE}
+```{r eval=FALSE, message=FALSE, include=FALSE}
 
 fates2 <- ndGLM %>% 
   select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date)
 
 ```
-```{r}
+```{r eval=FALSE, include=FALSE}
+cat("Camera fates\n\n")
 table(ndGLM$cam_fate)
 ```
 
@@ -343,8 +323,9 @@ ndGLM_ <- ndGLM_ |> mutate(
   # across(c(species, cam_fate, cfate, HF_mis, misclass, how_mis, is_u), as.factor)
 )
 
-ndGLM_ <- ndGLM_ |> mutate(is_u = isU(final_fate)) |>
-  mutate(c.fate    = cam_fate,
+ndGLM_ <- ndGLM_ |> 
+  mutate(is_u = isU(final_fate)) |>
+  mutate(c.fate   = cam_fate,
          cam_fate = as.character(cam_fate)) |>
   mutate(cam_fate = ifelse(is.na(cfate), NA, cam_fate)) |>
   mutate(cam_fate = case_match(cam_fate,
@@ -357,6 +338,9 @@ ndGLM_ <- ndGLM_ |> mutate(is_u = isU(final_fate)) |>
                                "7" ~ "U"
     
   ))
+
+# cat("Camera fates:\n")
+# table(ndGLM_$cam_fate)
 ```
 
 
@@ -400,34 +384,57 @@ NA201920 <- ndGLM_ %>%
 ndGLM_$numNA <- numNA                     # export the counts as part of the data
 ndGLM_$numNA1920 <- length(NA201920$nest) 
 
+# cat("All the missing values (with 2021):\n\n")
+# # sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
+# sapply(ndGLM_, function(x) sum(is.na(x)))
+# cat("\n\nWithout 2021:\n\n")
+# ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
+
+```
+
+
+```{r echo=FALSE, message=FALSE}
+ndGLM1 <- ndGLM_ %>% select(!c(status, fate_date, cfate)) # remove status (list of lists)
 cat("All the missing values (with 2021):\n\n")
 # sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
-sapply(ndGLM_, function(x) sum(is.na(x)))
-cat("\n\nWithout 2021:\n\n")
-ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
+# sapply(ndGLM_, function(x) sum(is.na(x)))
+ndGLM1 |> 
+  select(!c(fate, i, j, k, c.fate, numNA, numNA1920))|>
+  sapply(function(x) sum(is.na(x)))
 
+cat("\n\nWithout 2021:\n\n")
+ndGLM1 |> 
+  filter(year %in% c(2019,2020)) |>
+  select(!c(fate, i, j, k, c.fate, numNA, numNA1920))|>
+  sapply(function(x) sum(is.na(x)))
+  
 ```
 
 <!-- * Remove the NAs. -->
 
 ```{r echo=FALSE, message=FALSE}
-
-ndGLM1 <- ndGLM_ %>% select(!status) # remove status (list of lists)
+ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
 #T/F vector of correct length (nrows)
 ndGLM1$remove <- ndGLM1$nest %in% allNA # use %in% instead of ==
 # write.csv(ndGLM1, sprintf("output/which_removed%s.csv", now))
 
 ndGLM1 <- ndGLM1[ndGLM1$remove == FALSE,] # somehow I got 76 instead of 78
 fates <- ndGLM1 %>% select(nest,final_fate,cam_fate,misclass,how_mis,hatchfail,c_hatchfail,HF_mis, k)
+```
 
+
+```{r echo=FALSE, message=FALSE}
 ndGLM1$obs_int[ndGLM1$obs_int > 15] = 4
 
 ndGLM1 <- ndGLM1 |> 
-  mutate(  across(c(species, cam_fate, cfate, HF_mis, misclass, how_mis, is_u), as.factor)) # do this AFTER removing all the NAs so you don't get empty levels
+  mutate(  across(c(species, cam_fate, c.fate, HF_mis, misclass, how_mis, is_u), as.factor)) # do this AFTER removing all the NAs so you don't get empty levels
 
+
+cat("Camera fates:\n")
+table(ndGLM1$cam_fate)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 fates3 <- ndGLM1 %>% 
   select(nest, final_fate, cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fdate, fate_date, is_u)
@@ -830,7 +837,7 @@ ggplot(dat2, aes(x=nest_age, y=obs_int)) +
 
 ```{r include=FALSE}
 # univar_mod <- function(resp, modData, modsumORmodtab ){
-univar_mod <- function(resp, modData ){ # not sure how to return one or the other - just return both
+univar_mod <- function(resp, modData ){ 
   # browser()
   vars <- c("species", "nest_age", "cam_fate", "fdate", "obs_int")
   # vars <- c("species", "nest_age", "cfate", "fdate", "obs_int")
@@ -848,12 +855,7 @@ univar_mod <- function(resp, modData ){ # not sure how to return one or the othe
   }
   # return(modsum_)
 
-# modData <- ndGLM1
-# resp    <- "HF_mis"
-  # browser()
   modtab <- modData |> 
-  # select(c("misclass","species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
-  # select(paste(nm(resp), c("species", "nest_age", "cam_fate", "fdate", "obs_int"))) |>
     select(c(resp, "species", "nest_age", "cam_fate", "fdate", "obs_int")) |>
     tbl_uvregression(
     
@@ -863,24 +865,9 @@ univar_mod <- function(resp, modData ){ # not sure how to return one or the othe
       exponentiate = TRUE
     
   )
-  # return(broom::tidy(modsum_))
-  
-  # for(i in 1:length(vars)){
-  #   
-  #   umod_[[i]] |>
-  #     select(formula, coefficients, )
-  #   
-  # }
-  # modtab <- gt(modtab) # not working
   modtab <- as_gt(modtab)
-  # Error in UseMethod("group_vars") : 
-  # no applicable method for 'group_vars' applied to an object of class
-  #  "c('tbl_uvregression', 'gtsummary')"
-  
   modinfo = list(modsum, modtab)
-  # modinfo = list(modsum, as.gt(modtab))
-  # modinfo = list(modsum, gt(modtab))
-  return(modinfo )
+  return(modinfo ) # not sure how to return one or the other - just return both
 }
 # nm(resp)
 ```
@@ -1034,14 +1021,13 @@ full_tab <- function(nestAIC, nestBIC){
 
 ```{r include=FALSE}
 # Input DPI for gt table AIC table output:
-dpi      <- (1800/6)  # img width (px) / desired img width (in)
+dpi      <- (1800/6)                          # img width (px) / desired img width (in)
 
 nm       <- function(x) substitute(x)
 
 save_tab <- function(tab){
   
   now = format(Sys.time(), "%m%d_%H%M%S") # seconds bc tables all generated in < 1 min
-  # file_name <- paste0(names(tab)[1], "aicbic_", now, ".rtf")
 
   file_name <- paste0(nm(tab), now, ".rtf") 
   gtsave(tab, file_name, path="analysis/")
@@ -1061,10 +1047,6 @@ Center the (numerical) predictor variables (don't scale, just center)
 predictors <- c("nest_age", "fdate", "obs_int") # numeric predictors
 ndGLM_scl1 <- ndGLM1 %>% 
   mutate(across(predictors, function(x) as.numeric(scale(x,scale=F)))) #%>%
-# ndGLM_scl1 <- ndGLM_scl1 %>%
-#   mutate(cam_fate = ifelse("F", "U", cam_fate))# %>%
-#   mutate(cam_fate = as.factor(cam_fate))
-# make sure df is not a grouped_df or rowwise_df, or this won't work
 
 ndGLM_scl2 <- ndGLM2 %>%
   mutate(across(predictors, function(x) as.numeric(scale(x,scale=F))))
@@ -1271,7 +1253,8 @@ mods[[11]] <- glm(as.formula(paste0(
 
 ```{r echo=FALSE}
 # mods  <- mods[[c(7:12)]]
-mods  <- mods[c(1, 7:11)]
+# mods  <- mods[c(1, 7:11)]
+mods  <- mods[c(1, 7:length(mods))]
 aicHF <- aic_mod(mods)
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
@@ -1352,6 +1335,13 @@ mods[[6]] <- glm(as.formula(paste0(
 mod_diff(mods[[1]], mods[[6]])
 ```
 
+```{r}
+
+aicHF <- aic_mod(mods)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
+```
+
 <!-- 3.  Interaction models -->
 
 ```{r echo=FALSE}
@@ -1360,6 +1350,7 @@ mod_diff(mods[[1]], mods[[6]])
 mods[[7]] <- glm(as.formula(paste0(
   # resp,"~ fdate")),
   # resp,"~ species + obs_int + cam_fate")),
+  # resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
   resp,"~ species * nest_age + cam_fate + fdate + obs_int")),
   # resp, "~ fdate + obs_int + cam_fate + species * nest_age")),
   data=dataMod, family=binomial)
@@ -1405,7 +1396,9 @@ mods[[11]] <- glm(as.formula(paste0(
 <!-- 4.  Analysis -->
 
 ```{r echo=FALSE, message=FALSE}
-aicHF <- aic_mod(mods)
+# aicHF <- aic_mod(mods[c(1, 4, 7:11)]) # mod 4 is main effects model
+aicHF <- aic_mod(mods[c(1, 4, 7:length(mods))]) # mod 4 is main effects model
+
 filename <- save_tab(aicHF) # cqn get filename that table was saved to
 knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
 ```
@@ -1494,6 +1487,12 @@ mods[[6]] <- glm(as.formula(paste0(
 
 mod_diff(mods[[1]], mods[[6]])
 ```
+```{r}
+
+aicHF <- aic_mod(mods)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
+```
 
 <!-- #### Interaction models -->
 ```{r, include=FALSE}
@@ -1542,6 +1541,20 @@ mods[[11]] <- glm(as.formula(paste0(
   resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
   
 )), data=dataMod, family=binomial)
+
+mods[[12]] <- glm(as.formula(paste0(
+  
+  resp, "~ cam_fate * obs_int"
+  
+  
+)), data=dataMod, family=binomial)
+
+mods[[13]] <- glm(as.formula(paste0(
+  
+  resp, "~ obs_int + cam_fate * nest_age"
+  
+)), data=dataMod, family=binomial) # this was supposed to combine the 2 best models
+# gives the "fitted probabilities numerically 0 or 1 occurred" warning 
 ```
 
 #### Analysis
@@ -1549,7 +1562,7 @@ mods[[11]] <- glm(as.formula(paste0(
 For this analysis, because the first and second models (ranked by AIC) are so close, I would choose the model with only camera fate as the best model. I reduced the model to just cam_fate, and when I added back the next most significant variable (obs_int) the Chi-sq p-value (compared to full model) almost doubled to about 0.5. So I probably didn't need to add back the other variables, or should I do so in case they are having an effect on one of the explanatory variables?
 
 ```{r echo=FALSE}
-aicF <- aic_mod(mods)
+aicF <- aic_mod(mods[c(1,4,7:length(mods))])
 filename <- save_tab(aicF)
 
 knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
@@ -1631,6 +1644,12 @@ mods[[6]] <- glm(as.formula(paste0(
 mod_diff(mods[[1]], mods[[6]])
 ```
 
+```{r}
+aicHF <- aic_mod(mods)
+filename <- save_tab(aicHF) # cqn get filename that table was saved to
+knitr::include_graphics(paste0("analysis/",filename), dpi=dpi)
+```
+
 <!-- 3.  interaction models-->
 
 ```{r include=FALSE}
@@ -1688,7 +1707,7 @@ mods[[11]] <- glm(as.formula(paste0(
 <!-- 4. analysis-->
 
 ```{r echo=FALSE}
-aicf <- aic_mod(mods)
+aicf <- aic_mod(mods[c(1,5,7:length(mods))])
 filename <- save_tab(aicf)
 
 knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
@@ -1786,7 +1805,7 @@ mod_diff(mods[[1]], mods[[6]])
 
 ```{r include=FALSE}
 # ```{r echo=FALSE}
-oddRat <- odd_rat(mods)
+# oddRat <- odd_rat(mods)
 aicTab <- aic_mod(mods)
 # aicTab
 
@@ -1846,32 +1865,37 @@ mods[[11]] <- glm(as.formula(paste0(
 )), data=dataMod, family=binomial)
 ```
 
-```{r eval=FALSE, include=FALSE}
+```{r include=FALSE}
 
 # mods[[7]] <- glm(as.formula(paste0(
 #   resp, "~ species + nest_age + fdate" 
 # )), data=dataMod, family=binomial)
 # actually, compare to the main effects model as specified above (model 5) so it doesn't print twice
 
-mods[[7]] <- glm(as.formula(paste0(
+# mods[[7]] <- glm(as.formula(paste0(
+mods[[12]] <- glm(as.formula(paste0(
   resp, "~ species * nest_age + fdate" 
 )), data=dataMod, family=binomial)
 
 
-mods[[8]] <- glm(as.formula(paste0(
+mods[[13]] <- glm(as.formula(paste0(
   resp, "~ species + nest_age * fdate" 
 )), data=dataMod, family=binomial)
 
 
-mod_diff(mods[[5]], mods[[7]])
-mod_diff(mods[[5]], mods[[8]])
+mods[[14]] <- glm(as.formula(paste0(
+  
+  resp, "~ species * fdate + nest_age"
+)), data=dataMod, family=binomial)
+# mod_diff(mods[[5]], mods[[7]])
+# mod_diff(mods[[5]], mods[[8]])
 ```
 
 #### Analysis 2: including interaction models
 
 ```{r echo=FALSE}
 # oddRat <- odd_rat(mods)
-aicTab <- aic_mod(mods)
+aicTab <- aic_mod(mods[c(1,5,7:length(mods))])
 # aicTab
 
 filename <- save_tab(aicTab)
@@ -1964,6 +1988,16 @@ mods[[6]] <- glm(as.formula(paste0(
 mod_diff(mods[[1]], mods[[6]])
 ```
 
+```{r}
+
+aicTab <- aic_mod(mods)
+# aicTab
+
+filename <- save_tab(aicTab)
+
+knitr::include_graphics(paste0("analysis/", filename), dpi=dpi)
+```
+
 <!-- 3.  Interaction models -->
 ```{r}
 
@@ -2010,6 +2044,26 @@ mods[[11]] <- glm(as.formula(paste0(
   resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
   
 )), data=dataMod, family=binomial)
+```
+
+```{r}
+
+mods[[12]] <- glm(as.formula(paste0(
+  resp, "~ species * nest_age + fdate" 
+)), data=dataMod, family=binomial)
+
+
+mods[[13]] <- glm(as.formula(paste0(
+  resp, "~ species + nest_age * fdate" 
+)), data=dataMod, family=binomial)
+
+mods[[14]] <- glm(as.formula(paste0(
+  
+  resp, "~ species * fdate + nest_age"
+)), data=dataMod, family=binomial)
+
+# mod_diff(mods[[5]], mods[[7]])
+# mod_diff(mods[[5]], mods[[8]])
 ```
 
 <!-- 4.  Analysis -->

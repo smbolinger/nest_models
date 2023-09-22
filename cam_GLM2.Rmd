@@ -61,6 +61,7 @@ library(effects)
 library(ggpubr)
 library(cowplot)
 library(formatR)
+library(corrplot)
 ```
 
 ----------------------------------------------------------------------
@@ -105,7 +106,7 @@ Run the models:
 
 # \* \* PREPARE THE DATA \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-<!-- ## Read in the data. -->
+## Read in the data.
 
 ```{r include=FALSE}
 
@@ -166,7 +167,7 @@ table(ndGLM$year)
  
 ```
 
-<!-- ## Add variables representing misclassification. -->
+## Add variables representing misclassification.
 
 <!-- -   Combine some levels of the cam_fate variable and make sure it's coded as a factor with correct number of levels. -->
 
@@ -311,7 +312,7 @@ isU <- function(fate) ifelse(fate %in% c(7:9), 1, 0)
 
 ```
 
-<!-- ## Examine data; find and remove missing values (NA). -->
+## Examine data; find and remove missing values (NA).
 
 <!-- -   Ungroup dataframe and make categorical variables into factors; -->
 <!--     make sure other data classes are correct -->
@@ -609,7 +610,7 @@ knitr::include_graphics(paste0("analysis/",filename),
 
 # \* \* PLOTS \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \* \*
 
-<!-- ## HISTOGRAMS -->
+## HISTOGRAMS
 
 <!-- Plot the distributions of each continuous predictor with and without -->
 <!-- 2021 data. Make sure the bin sizes make sense. -->
@@ -725,7 +726,24 @@ plot_var("is_u", ndGLM2, "Unknown", "Assigned")
 
 
 
-<!-- ## CORRELATION PLOTS -->
+## CORRELATION PLOTS
+
+```{r}
+# corrplot(method=square, )
+cMat <- ndGLM1 |>
+  select(nest_age, fdate, obs_int) |>
+  cor() |>
+  corrplot.mixed(order="AOE")
+```
+```{r}
+
+cMat <- ndGLM2 |>                            # Exclude 2021
+  select(nest_age, fdate, obs_int) |>
+  cor() |>
+  corrplot.mixed(order="AOE")
+
+```
+
 
 <!-- -   Check for correlation amongst continuous predictors -->
 
@@ -844,10 +862,10 @@ univar_mod <- function(resp, modData ){
   umod_ <- list()
   for(v in seq_along(vars)){
     f <- paste0(resp," ~ ", vars[v])
-    # cat(f,"\n\n")
-    cat(f,"\t")
+    # cat(f,"\t")                             # print the models as they are called
     umod_[[v]] <- glm(f, data=modData, family=binomial)
   }
+  
   modsum <- list()
   
   for(i in 1:5){
@@ -1060,8 +1078,8 @@ write.csv(ndGLM_scl2, "scaled2.csv")
 
 
 ```{r eval=FALSE, include=FALSE}
-ndGLM_scl1 <- read.csv("scaled1.csv")
-ndGLM_scl2 <- read.csv("scaled2.csv")
+ndGLM_scl1 <- read.csv("nest_data/scaled1.csv")
+ndGLM_scl2 <- read.csv("nest_data/scaled2.csv")
 ```
 
 
@@ -1391,6 +1409,12 @@ mods[[11]] <- glm(as.formula(paste0(
   resp, "~ nest_age + cam_fate + obs_int + species * obs_int"
   
 )), data=dataMod, family=binomial)
+
+mods[[12]] <- glm(as.formula(paste0(
+  
+  resp,"~ species * cam_fate"
+  
+)), data=dataMod, family=binomial)
 ```
 
 <!-- 4.  Analysis -->
@@ -1549,12 +1573,24 @@ mods[[12]] <- glm(as.formula(paste0(
   
 )), data=dataMod, family=binomial)
 
-mods[[13]] <- glm(as.formula(paste0(
-  
-  resp, "~ obs_int + cam_fate * nest_age"
-  
-)), data=dataMod, family=binomial) # this was supposed to combine the 2 best models
-# gives the "fitted probabilities numerically 0 or 1 occurred" warning 
+# mods[[13]] <- glm(as.formula(paste0(
+#   
+#   resp, "~ obs_int + cam_fate * nest_age"
+#   
+# )), data=dataMod, family=binomial) # this was supposed to combine the 2 best models
+# # gives the "fitted probabilities numerically 0 or 1 occurred" warning 
+
+# mods[[14]] <- glm(as.formula(paste0(
+#   
+#   resp, "~ obs_int * cam_fate + nest_age"
+#   
+# )), data=dataMod, family=binomial)
+# 
+# mods[[15]] <- glm(as.formula(paste0(
+#   
+#   resp, "~ obs_int * nest_age + cam_fate"
+#   
+# )), data=dataMod, family=binomial)
 ```
 
 #### Analysis

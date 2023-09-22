@@ -346,8 +346,8 @@ ndGLM_ <- ndGLM_ |>
 
 -   Examine and remove missing data (NA) for relevant variables
 
-Including 2021: 36 nests with NA for at least one analysis variable (24%)
-Excluding 2021: 20 nests (20%)
+<!-- Including 2021: 36 nests with NA for at least one analysis variable (24%) -->
+<!-- Excluding 2021: 20 nests (20%) -->
 
 ```{r echo=FALSE}
 
@@ -394,7 +394,7 @@ ndGLM_$numNA1920 <- length(NA201920$nest)
 
 
 ```{r echo=FALSE, message=FALSE}
-ndGLM1 <- ndGLM_ %>% select(!c(status, fate_date, cfate)) # remove status (list of lists)
+ndGLM1 <- ndGLM_ %>% select(!c(status)) # remove status (list of lists)
 cat("All the missing values (with 2021):\n\n")
 # sapply(ndGLM_, function(x) which(is.na(x))) # or do this by nest number
 # sapply(ndGLM_, function(x) sum(is.na(x)))
@@ -413,7 +413,7 @@ ndGLM1 |>
 <!-- * Remove the NAs. -->
 
 ```{r echo=FALSE, message=FALSE}
-ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
+# ndGLM_ |> filter(year %in% c(2019, 2020)) |> sapply(function(x) sum(is.na(x)))
 #T/F vector of correct length (nrows)
 ndGLM1$remove <- ndGLM1$nest %in% allNA # use %in% instead of ==
 # write.csv(ndGLM1, sprintf("output/which_removed%s.csv", now))
@@ -1296,7 +1296,7 @@ knitr::include_graphics(paste0("analysis/",filename), dpi=140)
 m = "main effects"
 ```
 
-```{r warning=FALSE, include=FALSE}
+```{r include=FALSE}
 mods[[1]] <- glm(as.formula(paste0(
   resp,"~ species + nest_age + cam_fate + fdate + obs_int")),
   data=dataMod, family=binomial) # "fitted probabilities..." warning

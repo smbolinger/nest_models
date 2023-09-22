@@ -1,3 +1,4 @@
+
 # Darrah et al. 2018
 #Supporting Information Appendix S3
 
@@ -213,4 +214,3 @@ nt <- 1
 nc <- 3
 
 out.sub3.sc <- jags(win.data.sc, inits, params, "BUGS_model_subset_select.txt", n.iter=ni, n.thin=nt, n.burnin=nb, n.chains=nc, paral
-                    

@@ -55,17 +55,17 @@ glm_script/figures
 py_output/
 
 # rmark files
-.inp
-.res
-.vcv
-.out
+*.inp
+*.res
+*.vcv
+*.out
 
 # data
 nest_data/
 model_data/
-.csv
+*.csv
 
 # images
-.png
-.jpg
+*.png
+*.jpg
 

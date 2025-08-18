@@ -1,0 +1,112 @@
+intro notes:
+
+Corrected final obs interval for nests that were not checked/not found on penultimate obs
+
+- if there was a storm or something that prevented observation, marked as not checked
+- if nest obs simply not recorded on day when nearby nests were checked (small subset of nests in this category), used camera obs
+
+Also, try using the grouped data
+
+HATCH DATES: should I use actual hatch date for age for all hatched nests? or just the ones that don't have estimated hatch date?
+
+Differences between different failure classifications shouldn't matter since the
+response variable is HF_mis (dependent on a hatch/fail classification)
+
+What to do about birds that incubate well past estimated hatch date? EX: 934
+
+filter function:
+Create a separate column where U-H is treated as U; in the cam_fate
+column, treat it as H (more common) I guess in the end this doesn't
+matter as long as we got a fate from the camera...
+
+There is also a select function in the MASS package, so need to specify
+
+DECIDE HOW TO DEAL WITH U-H - should it be U or H? affects analysis
+
+THe hatchfail variable is where this conversion should take place; not here
+That is the only place where a comparison between field fate and camera fate takes place
+Field fate isn't used anywhere else
+
+I think the AIC results are different because I was making U-H into H and now making it into U?
+
+changes in nest_data_cleaned: 
+
+I edited in a shorter final obs int for 20256 and 20257 because bird was observed on nest 
+
+changed fate of 30965 back to U
+
+added 980 back to cam nests
+
+d. Decide how to deal with U-H and U-F values
+
+
+Keep field_fate as is? but make fate reflect these changes:
+(that is what is used in the comparison to create the response vars)
+
+Still not getting the same AIC output. Is it really because of these 4 remaining unknown fate nests that were originally changed to H? try changing all of these to H:
+slightly closer to the result from before...
+
+218 - not sure why J said "likely hatched" / what evidence?
+
+from the new data:
+10206 - originally U; same as 30950
+30950 - depends how much confidence you put in adult behavior as your only cue. 
+
+e. Add the response variables:
+For the add_vars function:
+If you add the UHisH=T argument, U-H will be made into H
+If you add the UFisF=T argument, U-F will be made into F
+Default for both is FALSE
+but doesn't change the field_fate value; just changes the values used to calculate the response variables.
+But I was ALSO doing this in filter_dat() function
+
+Maybe need to thru on a case-by-case basis and decide? 
+
+Not sure why the Andes paper had U-H as a separate category, but lumped the other uncertain fates together.
+
+
+All nests with field fate U should be HF_mis = 1 (all should be labeled as misclassified)
+
+  - this was not happening for a while
+  
+  - Could be a separate option you can turn on/off
+  
+  - Correcting it made delta AICc smaller. Maybe it's OK to have smaller sample for second question? But why did that affect delta AICc for the first question???
+  
+365 was abandoned when discovered (probably) so maybe just don't include it?
+
+Missing data for camera fate:
+
+Empty camera folder: 10317, 10324, 10122
+Camera stops early: 10338
+Pulled for july 4th 2019: 10325, 10326, 10327, 13211
+pulled for storm: 10340
+only 1 observation: 10340
+
+fixed: 10231,
+
+
+
+Not using all the camera nests (excluding Y* and Y.) does not appreciably change the delta AIC for the top 2 models for question 1; it decreases the delta AIC for top 2 models for question 2 by almost half. 
+
+making all U-H into H did improve the delta AIC for the first question and did not affect the second question.
+
+
+If you want to deal appropriately with U-F values, need to keep them separated out to U-D, U-A, etc. Right now they would all be reclassified as "F", which is technically failed-unknown. Although, if the response is HF_mis, this doesn't matter.
+
+View the nests that have field_fate of U-H and U-F:
+(There aren't any U-F or other failure categories)
+
+H originally; I changed them to U-H: 10127,20218 20251,20263, 20264, 20266, 20400, 20405, 20424, 20460
+chick(s) seen in field: 20400, 20460?
+other hatch signs in field: 20266 (behavior)
+marked U originally: 10206,10235,20260, 30421,30932,30938,10950, 30917
+
+
+TO DO:
+
+Figure out field evidence issue for 2020 "hatch" nests
+
+Find more papers and see which type of misclassification they use
+
+abandoned nests - what counts as final observation? is it once we realized it was abandoned? first obs after estimated hatch date (clear it didn't hatch when expected)? that only applies to non-viable eggs...

@@ -1,0 +1,1153 @@
+---
+title: "rmark_format"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(nestGLM)
+homeDir <- "C:/Users/sarah/Dropbox/nest_models/"
+```
+
+```{r eval=FALSE, include=FALSE}
+filename <- paste0(homeDir, "nest_data/nest_data_cleaned_0805_1955_.csv")
+nestData2 <- read_csv(filename)
+```
+
+Starting with grouped data:
+
+```{r}
+
+# filename <- paste0(homeDir, "nest_data/nest_data_cleaned_0805_1955_.csv")
+filename <- paste0(homeDir,read_file(paste0(homeDir, "nest_data/import_name.txt")))
+cat("importing from:",filename,"\n\n")
+nestData2 <- read_csv(filename)
+
+nestData2 <- nestData2 %>%
+  mutate(
+    cam_fate = cam_fate2, 
+    field_fate = field_fate2,
+    final_fate = final_fate2, 
+    fdate      = final_obs_date,
+    obs_int    = final_obs_int2,
+    nest_age   = nest_age1
+  )
+table(nestData2$field_fate)
+```
+
+
+```{r}
+cam_vect <- c("Y", "y", "Y*", "Y.") # including all cams seems to make delta AIC smaller
+nestData1 <- nestData2 %>%
+   mutate( final_fate = case_match(field_fate,
+                                   "H"   ~ 1,
+                                   "F"   ~ 0,
+                                   "D"   ~ 2,
+                                   "S"   ~ 3,
+                                   "A"   ~ 4,
+                                   "Hu"  ~ 5,
+                                   "Ca"  ~ 6,
+                                   "U"   ~ 7,
+                                   "U?"  ~ 7,
+                                   "U-H" ~ 8
+           ),
+
+           cam_fate = case_match(cam_fate,
+                                 "H"  ~ 1,
+                                 "F"  ~ 0,
+                                 "D"  ~ 2,
+                                 "S"  ~ 3,
+                                 "A"  ~ 4,
+                                 "Hu" ~ 5,
+                                 "Ca" ~ 6,
+                                 "U"  ~ 7
+           ),
+           camera = ifelse(camera %in% cam_vect, TRUE, FALSE)
+   )
+```
+
+
+
+## Formatting for DSR models ------------------------------------------------
+###
+Let's start with the DSR models, which require less formatting. This
+data will become 2 datasets per DSR model: one w/ camera fates included
+and one without.
+
+We can remove nests with unknown final fate--all nests with (original) fates of
+"U" "U?" and "U-H"--which includes nests that were not tracked to final fate
+and nests whose fate was not clear based on the field data. 
+
+We will remove all nests with fates 7 and 8. As before with "NA" fate nests, we 
+will record the nest numbers so we know which nests are being excluded, as well
+as how many.
+
+Or make fate 8 == hatch??
+
+
+```{r eval=FALSE, include=FALSE}
+
+n <- nestData1$nest
+
+ijk    <- nestData1 %>%
+  filter(!is.na(k)) %>%
+  mutate(
+    # ff=grep("[:digit:]+(?=\\|)", )
+    ff=str_extract( obs_dates,"[0-9]+(?=\\|)"),
+    la = stringi::stri_extract_last_regex(obs_dates, "[0-9]+(?=\\|)"),
+    # la = str_extract(nestData1$obs_dates)
+    lc = stringi::stri_extract_last_regex(obs_dates, "(?<=\\|)[0-9]+")
+  )
+```
+
+
+Unknown nests - do we keep them as unknown or move 8 and 9 to hatch and fail, respectively?
+Conservative estimate and less conservative estimate?
+Codes:
+                                 "U"   ~ 7,
+                                 "U?"  ~ 7,
+                                 "U-H" ~ 8,
+                                 "U-F" ~ 9,
+                                 "U-A" ~ 9,
+                                 "U-D" ~ 9
+                                 
+                                 
+
+
+```{r eval=FALSE, include=FALSE}
+totNest <- unique(nestData1$nest)
+# unknown <- nestData[nestData$final_fate %in% c(7,8) ,]
+nestData1$cam_fate[nestData1$cam_fate == 7] = NA
+```
+
+Conservative estimate:
+
+```{r eval=FALSE, include=FALSE}
+unknown <- nestData1[nestData1$final_fate %in% c(7:9)  & is.na(nestData1$cam_fate),] 
+uNest  <- unique(unknown$nest)
+```
+
+Less conservative estimate:
+
+```{r eval=FALSE, include=FALSE}
+unknown1 <- nestData1[nestData1$final_fate == 7 & is.na(nestData1$cam_fate),] 
+uNest1  <- unique(unknown1$nest)
+#uNests  # view all nests with unknown fate
+```
+
+
+```{r eval=FALSE, include=FALSE}
+# kNA     <- which(is.na(nestData$k)) # which rows
+kNAnest <- unique(nestData1$nest[(which(is.na(nestData1$k)))])
+
+# MORE CONSERVATIVE
+nestRm  <- union(uNest, kNAnest) # which nests being removed
+nestRm                            # view them
+# LESS CONSERVATIVE
+nestRm1 <- union(uNest1, kNAnest)
+nestRm1
+
+# nests that violate RMark assumptions:
+bad     <- union(wrong,wrong2)
+bad     <- union(bad, wrong3)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+# ordered <- (ijk$k > ijk$i) & (ijk$k > ijk$j)
+ordered <- (ijk$k > ijk$i)
+ordered2 <- (ijk$k >= ijk$j)
+
+# which(ordered==FALSE)
+nestData1$nest[ordered==FALSE]
+nestData1$nest[ordered2==FALSE]
+nestData1$nest[nestData1$k < nestData1$j]
+# checkNests <- nestData1 %>% group_by(nest) %>%
+#   #summarize(final = last(status),
+#   mutate(final_fate = as.character(final_fate)) %>% # col types must match
+#   mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>% # final status = fate
+# #checkNests <- checkNests %>% group_by(nest) %>%
+#   summarize(
+#             final_day = max(season_day),
+#             k=last(k),
+#             status= list(status_), #%>%
+#             final_obs = last(status_),
+#             final_fate = last(final_fate)
+#   ) 
+
+# checkNests$remove <- checkNests$nest %in% nestRm
+# goodNests <- checkNests |>
+#   # filter(final_fate %in% c(0:6), !is.na(k)) %>%
+#   filter(remove == FALSE) |>
+#   filter( lengths(status) > 1) 
+# # after summarizing, status_ doesn't exist anymore
+#   #filter(final == final_fate)
+```
+
+The full set of MARK nests:
+This excludes nests that both have no final fate and no cam fate
+Equivalent to the "camera" dataset except we haven't changed final fate to cam fate yet
+MORE CONSERVATIVE
+df.duplicated returns a df containing all duplicate rows, including the first instance
+so if two different rows appear more than once, all are included
+but DOESN'T include the index of the row in the original df...
+if you run duplicated (base R function) with fromLast=T AND then again with fromLast=F, should get all rows including the first instance
+(ex: 
+
+```{r eval=FALSE, include=FALSE}
+dat <- data.frame(x1 = c(1, 1, 2, 2, 4),
+                  x2 = c(1, 1, 2, 2, 6),
+                  x3 = c(2, 2, 3, 3, 6),
+                  x4 = c(1, 1, 2, 2, 4),
+                  x5 = c(1, 1, 2, 2, 6))
+dups <- misty::df.duplicated(.,data=dat)
+
+```
+
+remember: rows, not columns (x1-x5 are columns)
+
+```{r echo=TRUE}
+MARKnest <- nestData1 |> 
+  # group_by(nest) |>
+  mutate(final_fate = as.character(final_fate),
+    ff=str_extract( obs_dates,"[0-9]+(?=\\|)"),
+    la = stringi::stri_extract_last_regex(obs_dates, "[0-9]+(?=\\|)"),
+    # la = str_extract(nestData1$obs_dates)
+    lc = stringi::stri_extract_last_regex(obs_dates, "(?<=\\|)[0-9]+")
+         # k      = ifelse(!is.na(cam_fate) & !is.na(fate_date),
+         #                 fate_date,
+         #                 k)
+         ) |>
+  # mutate(status_ = ifelse(last_obs == T, final_fate, status)) |>
+  # mutate(remove = nest %in% nestRm) |>
+  # mutate(check  = nest %in% bad) |>
+  # filter(remove == FALSE) |>
+  filter(k > i,
+         species %in% c("CONI", "LETE"),
+         site %in% c("RUTW", "RUTE")) |>
+  select(nest, species, cam_fate, final_fate, i, ff, j, j_adj, la, k, k_adj, lc,
+         site, year, cov_1m, cov_5m, prot, init_date, nest_age)
+```
+
+
+
+
+
+Check for duplicate observation histories (rows):
+
+```{r eval=FALSE, include=FALSE}
+# MARKnest0$dup <- duplicated(MARKnest)|duplicated(MARKnest, fromLast=T)
+MARKnest$dup <- duplicated(MARKnest)|duplicated(MARKnest, fromLast=T)
+which(MARKnest$dup == TRUE)
+```
+
+Make it MARK-compatible:
+hatch is now 0, fail is 1
+
+```{r echo=TRUE}
+# if no duplicate rows (obs histories), continue with analysis
+
+MARKnest <- MARKnest |>
+  mutate(
+
+    # status = ifelse(status == 1, 0, 1), # status is a list, doesn't work
+    fate   = ifelse(final_fate==1,0,1),
+    cfate  = ifelse(cam_fate==1,0,1),
+    # n      = ifelse(dup==TRUE, T, 1)
+    freq   = 1
+  ) 
+
+# MARKnest$j_adj[MARKnest$nest==20405] =94
+
+  
+```
+
+Now, compare last checked vs k, etc.?
+
+```{r}
+# 
+```
+
+For the "camera" dataset, make last status cam_fate (if applicable); otherwise, keep it as final_fate
+*NOTE* status isn't really relevant for MARK, but could be for other models...
+K also changes because we know the actual last day of the nest for most of them
+In cases where k > j after looking at cam footage, set j == the new k 
+
+```{r echo=TRUE}
+MARKnestCam <- MARKnest |>
+  # select(nest,  site, cov_1m, cov_5m, prot, init_date,)
+  mutate(
+         # update = !is.na(cam_fate) & !is.na(fate_date) & fate == 0,
+         fate   = ifelse(!is.na(cam_fate), cfate, fate), # replace with the one that's been transformed for RMark
+         final_final_fate = ifelse(!is.na(cam_fate), cam_fate, final_fate),
+         k      = ifelse(!is.na(k_adj), k_adj, k),
+         j      = ifelse(!is.na(j_adj), j_adj, j)
+  )|>
+  filter(final_final_fate %in% c(0:6)) |>
+  select(nest, site, species, i, ff, j, la, k, lc, fate, freq,
+                  cov_1m, cov_5m, prot, init_date, nest_age)
+```
+
+
+```{r echo=TRUE}
+MARKnestCam %>%
+# MARKnestFld %>%
+  filter(fate == 0) %>%
+  filter(j != k) %>% 
+  select(nest) %>%
+  unlist(use.names=FALSE)
+# table(MARKnest$final_fate)
+# 
+
+# MARKnestCam2 <- MARKnestCam |>
+# MARKnestCam <- MARKnestCam |>
+#   mutate(
+#     # status = ifelse(last_obs == T & !is.na(cam_fate),
+#                          # cam_fate,
+#                          # status),
+#          # k      = ifelse(camera == T & !is.na(fate_date),
+#          # k      = ifelse(!is.na(cam_fate) & !is.na(fate_date) & fate == 0,
+#          k      = ifelse(update==TRUE,
+#                          fate_date,
+#                          k),
+#                          # fate_date,
+#                          # k),
+#          # j      = ifelse(!is.na(fate_date) & k==fate_date & fate == 0,
+#          j      = ifelse(fate == 0,
+#                          k,
+#                          j),
+#          # fate   = ifelse(!is.na(cam_fate), cfate, fate) # replace with the one that's been transformed for RMark
+#          # ID     = paste("/*",nest,"*/" )
+#          ) |>
+#   select(nest, i, j, k, fate, freq, nocc, species, nest_age, final_fate, cam_fate)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+MARKnestFld <- MARKnest |>
+  filter(final_fate %in% c(0:6)) |>
+  select(nest, site, species, ff, i, la, j, lc, k, fate, freq,
+                  cov_1m, cov_5m, prot, init_date, nest_age)
+# 
+# MARKnestFld$j[MARKnestFld$nest==20231] = 48
+# MARKnestFld$j[MARKnestFld$nest==30935] = 81
+# MARKnestFld$j[MARKnestFld$nest==10127] = 81
+  # |>
+  # select(nest, i, j, k, fate, freq, nocc, species, nest_age, final_fate, cam_fate)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+MARKnestFld %>% 
+  filter(fate == 0) %>%
+  filter(j != k) %>% 
+  select(nest) %>%
+  unlist(use.names=FALSE)
+```
+
+```{r eval=FALSE, include=FALSE}
+# write.csv()
+now = format(Sys.time(), "%m%d_%H%M_")
+# MARKnest$bad <- 
+# fname1 <- sprintf("model_data/ruth_rmark_cam_%s.csv", now)
+# fname2 <- sprintf("model_data/ruth_rmark_fld_%s.csv", now)
+fname1 <- sprintf("%s/model_data/ruth_rmark_cam_%s.csv", homeDir,now)
+fname2 <- sprintf("%s/model_data/ruth_rmark_fld_%s.csv",homeDir, now)
+fname1
+fname2
+write.csv(MARKnestCam, fname1)
+write.csv(MARKnestFld, fname2)
+```
+
+
+
+
+
+Remember the nest fate codes:
+                                 "H"   ~ 1, 
+                                 "F"   ~ 0, 
+                                 "D"   ~ 2,
+                                 "S"   ~ 3,
+                                 "A"   ~ 4,
+                                 "Hu"  ~ 5,
+                                 "Ca"  ~ 6,
+
+
+Don't remove unknown fate nests until you split into field and camera
+
+```{r eval=FALSE, include=FALSE}
+# ijk     <- c(i,j,k)
+# ndDSR   <- nestData %>% # something is setting status to 0 for every row
+#   # mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>%
+#   mutate(status = ifelse(last_obs == T, final_fate, status)) %>%
+  # seems to be !is.na(k)
+  # also, k values are way off again...
+  # group_by(nest) %>%
+  # summarize(
+  #           final_day = max(season_day),
+  #           k=last(k),
+  #           status= list(status_), #%>%
+  #           final_obs = last(status_),
+  #           final_fate = last(final_fate)
+  # ) %>% 
+  # 
+  # filter(final_fate %in% c(0:6), !is.na(k))
+  # mutate(status_ = ifelse(last_obs == T, final_fate, status)) %>%
+  # filter(status_ %in% c(0:6)) %>% 
+# cat("final fate frequency:\n")
+# table(ndDSR$final_fate)
+# cat("\n\nNests in DSR model:\n\n")
+# unique(ndDSR$nest) # which nests are left?
+
+```
+
+### field vs. camera
+Go ahead and remove nests with missing covariates? 
+Or go thru and make sure i,j,k are correct for all nests?
+I am honestly not sure what I was doing in this chunk:
+(and then I split it up, too)
+
+```{r eval=FALSE, include=FALSE}
+# nestCam  <- unique(ndDSR$nest[!is.na(ndDSR$cam_fate)])
+# camera nests left after removing k==NA AND filtering out U fate nests
+
+n <- unique(nestData1$nest[nestData1$same_ID==0])
+
+# ndDSRcam <- nestData %>%
+ndDSR <- nestData1 %>%
+#   # mutate(status = ifelse(last_obs == T & camera == T & !is.na(cam_fate), 
+  filter(nest %in% n) %>%
+#   # filter(!is.na(k)) %>% 
+#   mutate(status = ifelse(last_obs == T & !is.na(cam_fate), 
+#                          cam_fate,
+#                          status),
+#          k      = ifelse(camera == T & !is.na(fate_date),
+#                          fate_date,
+#                          k),
+#          # final_fate = ifelse(final_fate %in% c(7:9) & !is.na(cam_fate),
+#          #                     cam_fate,
+#          #                     final_fate),
+#          season_day = as.numeric(season_day))
+# # for cam nests, replace final fate with camera fate
+```
+
+### When should NAs be removed?
+
+```{r}
+# # ndDSRcam1 <- ndDSRcam[ndDSRcam$cam_fate %in% c(0:6),]
+# ndDSRcam1 <- ndDSRcam[ndDSRcam$final_fate %in% c(0:6),]
+# # ndDSRcam1 <- ndDSRcam1[!is.na(ndDSRcam1$final_fate),] # REMOVE NAs
+# ndDSRcam1 <- ndDSRcam1[!is.na(ndDSRcam1$k),] # REMOVE NAs
+# ndDSRcam1 <- ndDSRcam1[!is.na(ndDSRcam1$i),] # REMOVE NAs
+# ndDSRcam1 <- ndDSRcam1[!is.na(ndDSRcam1$j),] # REMOVE NAs
+# ndDSRcam1 <- ndDSRcam1[!is.na(ndDSRcam1$nest_age),] # REMOVE NAs
+```
+
+```{r}
+# ndDSRfield <- nestData %>%
+#   filter(nest %in% n) %>%
+#   filter(!is.na(k)) %>%
+#   mutate(status = ifelse(last_obs == T & !is.na(cam_fate), 
+#                          cam_fate,
+#                          status),
+#          k      = ifelse(camera == T & !is.na(fate_date),
+#                          fate_date,
+#                          k),
+#          season_day = as.numeric(season_day))
+# 
+# ndDSRfield1 <- ndDSRfield[ndDSRfield$final_fate %in% c(0:6),]  
+# ndDSRfield1 <- ndDSRfield1[!is.na(ndDSRfield1$final_fate),] # REMOVE NAs
+# ndDSRfield1 <- ndDSRfield1[!is.na(ndDSRfield1$k),] # REMOVE NAs
+# ndDSRfield1 <- ndDSRfield1[!is.na(ndDSRfield1$i),] # REMOVE NAs
+# ndDSRfield1 <- ndDSRfield1[!is.na(ndDSRfield1$j),] # REMOVE NAs
+# ndDSRfield1 <- ndDSRfield1[!is.na(ndDSRfield1$nest_age),] # REMOVE NAs
+
+```
+
+Camera-assisted data:
+```{r eval=FALSE, include=FALSE}
+n <- unique(nestData1$nest[nestData1$same_ID==0])
+final_fate = ifelse(final_fate %in% c(7:9) & !is.na(cam_fate),
+                             cam_fate,
+                             final_fate)
+```
+
+Check that everything was transformed the way we expected:
+
+```{r}
+# good <- unique(ndDSR$nest[which( max(ndDSR$status) == ndDSR$final_fate )])
+
+#   #
+# bad <- good %>% 
+#   filter(final_day != k)
+# 
+# alsoBad <- good %>%
+#   filter(lengths(status)<2) # note function "lengths"
+# 
+# weirdNests <- good$nest[which(good$final_day != good$k)]
+# 
+
+
+```
+
+### Program MARK 
+
+If we want to use the data in Program MARK, we need the following:
+
+-   nest ID
+
+-   nest observation history
+
+-   values for i (first found), j (last seen active), and k (last
+    observed)
+
+-   does any other nest have this exact history?
+
+-   covariate values, if applicable
+
+For hatched nests, j will often == k because the final observation is of
+newly-hatched chicks.
+
+```{r eval=FALSE, include=FALSE}
+ndMARKfld <- ndDSRfield1 %>%                  # field data (no cameras) 
+  #filter(camera == FALSE) %>% 
+  mutate(status = ifelse(status == 1, 0, 1),
+         fate   = ifelse(final_fate==1,0,1) )%>%  # in MARK, 0=alive, 1=dead
+  group_by(nest, site, species) %>%
+  # group_by(nest) %>%   
+  # even when you group by nest and not the other 2, ii is wrong
+  # select(nest, final_fate, fate, status, i, j, k, cov_5m, nest_age, season_day) %>%
+  summarize(status = list(status), 
+            i=min(season_day), # why does this get messed up for a few rows???
+            # jj=ifelse(last(final_fate==1), max(season_day), nth_max(season_day, n=2)),
+            j= eeptools::nth_max(season_day, n=2), # change for hatched nests later
+            k=max(season_day),
+            # ii=min(season_day), # why does this get messed up for a few rows???
+            # # needed to make numeric
+            # # jj=ifelse(last(final_fate==1), max(season_day), nth_max(season_day, n=2)),
+            # jj= nth_max(season_day, n=2), # change for hatched nests later
+            # kk=max(season_day),
+            # i = max(i),
+            # j = max(j),
+            # k = max(k),
+            fate = last(fate),
+            cam_fate   = last(cam_fate),
+            nest_age   = max(nest_age)
+            # j=ifelse(final_fate==1, max(season_day), nth_max(season_day, n=2)))
+            # across(where(is.integer), last),
+            # across(where(is.numeric), last),
+            # across(where(is.character), first)
+  ) %>%
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|')) 
+ndMARKfld$nocc <- max(ndDSRfield1$season_day)
+```
+
+For the data including the cameras, keep "fate_date" because that will become the new "k" (the camera lets us know exactly how long the nest survived during the final observation interval instead of guessing)
+
+```{r eval=FALSE, include=FALSE}
+ndMARKcam <- ndDSRcam1 %>%                  # field + camera data
+  mutate(status = ifelse(status == 1, 0, 1),
+         fate   = ifelse(final_fate==1,0,1) )%>%  # in MARK, 0=alive, 1=dead
+  # group_by(nest, site, species) %>%   
+  group_by(nest, site, species) %>%   
+
+  summarize(status = list(status), 
+            # ii=min(season_day), # why does this get messed up for a few rows???
+            # # jj=ifelse(last(final_fate==1), max(season_day), nth_max(season_day, n=2)),
+            # jj= nth_max(season_day, n=2), # change for hatched nests later
+            # kk=max(season_day),
+            i=min(season_day), # why does this get messed up for a few rows???
+            # jj=ifelse(last(final_fate==1), max(season_day), nth_max(season_day, n=2)),
+            j= eeptools::nth_max(season_day, n=2), # change for hatched nests later
+            k=max(season_day),
+            # i = max(i),
+            # j = max(j),
+            # k = max(k),
+            fate = last(fate),
+            cam_fate   = last(cam_fate),
+            nest_age   = max(nest_age)
+            # j=ifelse(final_fate==1, max(season_day), nth_max(season_day, n=2)))
+            # across(where(is.integer), last),
+            # across(where(is.numeric), last),
+            # across(where(is.character), first)
+  ) %>%
+  
+  # select(nest, site, species, status, i,ii, j,jj, k,kk, final_fate, fate, cov_5m, nest_age, cam_fate, season_day ) %>%
+  # mutate(lastObs = ifelse(cam_fate == 1, 0, lastObs)) %>% # ???
+  
+  # mutate_if(is.list, ~paste(unlist(.), collapse = ',')) 
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|')) 
+wrong_order <- which(ndMARKcam$i > ndMARKcam$k)
+wo          <- ndMARKcam[wrong_order,] # ??? these are ones where ii > kk, not i>k
+which(ndMARKcam$ii > ndMARKcam$kk)
+ndMARKcam$nocc <- max(ndDSRcam1$season_day)
+
+```
+
+Now save the MARK data to csv:
+
+```{r eval=FALSE, include=FALSE}
+# now = "830_1826"
+if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename <- paste0("model_data/MARK_data_field_",now,".csv")
+write.csv(ndMARKfld, filename)
+
+filename <- paste0("model_data/MARK_data_cam_",now,".csv")
+write.csv(ndMARKcam, filename)
+```
+
+### Bayesian logistic exposure model
+
+Unlike Program MARK, the Bayesian multinomial logistic DSR model allows us to include multiple causes of nest failure, like we coded for earlier. Now we can reformat the nest fates so that there are fewer categories, which should make DSR model interpretation easier.
+
+(In reality, how many causes of failure can we include and still be able to interpret the model output? Do I have too many?)
+
+The "cattle" category includes both nests that were destroyed by cattle
+and nests that were abandoned because of cattle disturbance. We will
+lump the cattle-destroyed nests in with human-destroyed nests, and
+cattle-abandonment nests with all other abandoned nests. These are the
+new categories:
+
+0 - failed (unknown/unspecified) \| 1 - hatched 
+2 - depredated \| 3 - storm-related (surge, flooding) 
+4 - abandoned \| 5 - destroyed (human, cattle)
+
+```{r eval=FALSE, include=FALSE}
+# visually inspect nests with fate Ca and Hu in the Excel sheet to look for 
+# notes about specific cause of failure and status of nest at last observation 
+# (were there still eggs, but abandoned due to disturbance, or were eggs 
+# destroyed?)
+
+chNests <- ndDSR %>% 
+  filter(final_fate %in% c(5,6) | cam_fate %in% c(5,6)) %>%
+  mutate(nest = as.character(nest),  # data types must match to join 
+         final_fate = as.character(final_fate)) %>%
+  # mutate(notes = allData$NOTES) %>%
+  group_by(nest) %>%
+  summarize(final_fate = last(final_fate),
+            cam_fate   = last(cam_fate),
+            final_obs  = last(final_obs),
+            status     = list(status)) 
+# chNests <- chNests %>% left_join(allData, by = join_by(nest)) 
+# join by both nest and final_fate to avoid duplicating final_fate
+# except that seems to make NOTES == NA?
+# chNests1 <- chNests %>% left_join(allData, by = join_by(nest, final_fate)) 
+# notes <- read_delim("output/field_notes_0830_1438_.csv", 
+notes <- read_csv("output/field_notes_0830_1438_.csv",
+                  # col_names = c("nest", "notes"),
+                  col_types = cols(.default="c"),
+                  col_select= c(2:3)
+)
+
+names(notes) <- c("nest", "notes")
+
+nfates <- table(ndDSR$final_fate)
+ncfates <- table(ndDSR$cam_fate)
+
+                  # col_select = c(starts_with("allData"))
+                  # delim = " "
+                  # )# only loading one column
+# chNests1 <- chNests %>% left_join(allData, by = join_by(nest )) 
+chNests1 <- chNests %>% left_join(notes, by = join_by(nest )) 
+chNests1 <- chNests1 %>%  select(nest, status, cam_fate, final_fate, final_obs, notes)
+# chNests1 <- chNests1 %>%  select(nest, status, cam_fate.x, final_fate.x, final_obs, NOTES)
+
+dsKey <- c("destroyed", "crushed", "cracked", "trampled", "run over", "Ran over", "Stick broken")
+abKey <- c("cold", "abandoned", "getting eaten by ants", "loose egg")
+```
+
+```{r}
+# for(n in nrow(chNests1)) append(newF, str_extract(chNests1$NOTES[n], dsKey))
+# for(n in 1:nrow(chNests1)) newF[[n]] <- str_extract(chNests1$NOTES[n], dsKey)
+# newF2 <- list()
+# for(n in 1:nrow(chNests1)) newF2[[n]] <- str_extract(chNests1$NOTES[n], abKey)
+
+# newF <- coalesce(newF, newF2)
+# newF <- 
+# for(n in 1:nrow(chNests1)) {
+#   newF[[n]] <- case_when(
+#     !is.na(str_extract(chNests1$NOTES[n], dsKey)) ~ "Ds",
+#     !is.na(str_extract(chNests1$NOTES[n], abKey)) ~ "A",
+#     !is.na(str_extract(chNests1$NOTES[n], "tracks")) & chNests1$final_obs %in% dead ~ "Ds", 
+#     !is.na(str_extract(chNests1$NOTES[n], "tracks")) & chNests1$final_obs %in% alive ~ "A",
+#   ) 
+# for(n in 1:nrow(chNests1)) {
+#   newF[[n]] <- case_when(
+#     all(!is.na(str_extract(chNests1$NOTES[n], dsKey))) ~ "Ds",
+#     all(!is.na(str_extract(chNests1$NOTES[n], abKey))) ~ "A",
+#     all(!is.na(str_extract(chNests1$NOTES[n], "tracks"))) & chNests1$final_obs %in% dead ~ "Ds",
+#     all(!is.na(str_extract(chNests1$NOTES[n], "tracks"))) & chNests1$final_obs %in% alive ~ "A",
+#   )}
+# for(n in 1:nrow(chNests1)) {
+#   # newF[[n]] <- case_when(
+#   newF[n] <- case_when(
+#     !all(is.na(str_extract(chNests1$NOTES[n], dsKey))) ~ "Ds",
+#     !all(is.na(str_extract(chNests1$NOTES[n], abKey))) ~ "A",
+#     !all(is.na(str_extract(chNests1$NOTES[n], c("track","print")))) & chNests1$final_obs %in% dead ~ "Ds",
+#     !all(is.na(str_extract(chNests1$NOTES[n], c("track","print")))) & chNests1$final_obs %in% alive ~ "A",
+#   )
+# }
+# chNests1[which(is.na(newF) == is.na(chNests1$NOTES)),]
+# which((is.na(newF) == is.na(chNests1$NOTES))==F)
+# notmatch <- which(newF != chNests1$final_fate.x)
+# already accounted for NA, so this should be the ones w/ no useful info in notes
+# otherwise the NAs in one list should match the locations of NAs in the other
+# which(chNests1)
+# chNests1$NOTES[1]
+# newF[[11]] <- !anyNA(str_extract(chNests1$NOTES[11], dsKey))
+# chNests1$new_f <- 
+# for(n in 1:nrow(chNests1)){
+#   chNests$newF <-
+#     case_when(!is.na(str_extract(chNests1$NOTES[n], dsKey))~"Ds",
+#               !is.na(str_extract(chNests1$NOTES[n], abKey))~"A",
+#             TRUE                                        ~chNests$final_fate[n])
+# }
+# newF[[11]] <- str_extract(chNests1$NOTES[11], dsKey)
+# for(n in 1:nrow(chNests1)) {
+  # str_extract(chNests1$NOTES[n], dsKey)
+# }
+# chNests2 <- chNests1 %>%
+#   mutate(new_fate = case_when(
+#   ))
+#     str_extract(NOTES, dsKey ) ~ "Ds",
+#     str_extract(NOTES, abKey) ~ "A"))
+#Caused by error in `str_extract()`:
+# ! Can't recycle `string` (size 75) to match `pattern` (size 7).
+# Backtrace:
+# # chNests1$NOTES[!is.na(chNests1$NOTES)]
+# # chNests1 <- chNests %>%  left_join(allData, by = join_by(nest)) 
+
+# chNests$notes <- allData$NOTES[allData$nest %in% chNests$nest]
+# chNests$notes <- allData$NOTES[allData$nest == chNests$nest]
+
+# chNests <- unique(chNests$nest) %>%
+
+  # mutate(notes = allData$NOTES[allData$nest %in% chNests$nest])
+  # mutate(notes = allData$NOTES[allData$nest == chNests$nest])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which()])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which(allData$nest == nest)])
+# chNests <- chNests %>% mutate(notes = allData$NOTES[which(allData$nest == chNests$nest)])
+
+# notes   <- data$NOTES[data$nest %in% chNests$nest,]
+# notes   <- allData$NOTES[nestData$nest %in% chNests$nest]
+# notes   <- V
+
+# write(notes, sprintf("output/Ca_Hu_notes_%s.txt", now))
+# write("notes from Ca and Hu fate nests", sprintf("output/Ca_Hu_notes_%s.txt", now))
+# for(n in chNests) k
+
+
+
+```
+
+Insert the nest numbers of nests whose fate needs to change to abandoned or destroyed below, and their fates will be converted accordingly:
+
+```{r eval=FALSE, include=FALSE}
+alive = c('H', '3C', '2C', '1C', '3E', '2E', '1E', 'BON', 'chick behavior', 'nest behavior', 'hatch', 'poops') 
+
+dead  = c('F', "fail", "0E", "D", "W", "empty", "0e", "no activity", "coyote", "no chicks or parents", "nothing", "no activity")
+```
+
+```{r eval=FALSE, include=FALSE}
+newF <- list() 
+
+for(n in 1:nrow(chNests1)) {
+  # newF[[n]] <- case_when(
+  newF[n] <- case_when(
+    !all(is.na(str_extract(chNests1$notes[n], dsKey))) ~ "Ds",
+    !all(is.na(str_extract(chNests1$notes[n], abKey))) ~ "A",
+    !all(is.na(str_extract(chNests1$notes[n], c("track","print")))) & chNests1$final_obs %in% dead ~ "Ds",
+    !all(is.na(str_extract(chNests1$notes[n], c("track","print")))) & chNests1$final_obs %in% alive ~ "A",
+    TRUE ~ NA
+  )
+}
+
+which((is.na(newF) == is.na(chNests1$notes))==F)
+newF[newF=="Ds"] <- 5
+newF[newF=="A"]  <- 4
+nest <- chNests1$nest
+
+newnewF <- as.data.frame(cbind(nest, newF))
+
+# newF <- data.frame(nest=nest, fate=newF) # interpreted as x and y values
+# newF <- data.frame(nest=nest, fate=newF)
+# ndDSR <- nestData %>% mutate(final_fate = ifelse())
+
+# ndDSR <- nestData %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+  # mutate(finalfate = modify_if(final_fate %in% c("A", "Hu"), newF))
+#Caused by error in `modify_if()`:
+# ℹ In index: 1.
+# Caused by error:
+# ! `.p()` must return a single `TRUE` or `FALSE`, not NULL.
+# ndDSR <- nestData %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+```
+
+
+```{r}
+# mutate(finalfate = modify_if(.p=final_fate %in% c("A", "Hu"), .f=final_fate = newF))
+# ndDSR$newF = newF
+# ndDSR$finalF <- ifelse(ndDSR$final_fate )
+
+# which(ndDSR[ndDSR$nest == chNests1$nest],)
+# which(ndDSR$nest == chNests1$nest),
+# nests <- which(ndDSR$nest %in% chNests1$nest)
+# nestindex <- 
+# nestnums <- unique(ndDSR$nest[nests])
+# nestnums <- unique(nests)
+
+
+# ndDSR$finalf[nestindex] <- 
+# for(n in 1:length(nestindex)) ndDSR$finalf[nestindex[n]] = newnewF$newF[n]
+# for(n in 1:length(nestindex)) ifelse() ndDSR$finalf[nestindex[n]] = newnewF$newF[n]
+# 
+# x=1 
+# for(n in 1:length(ndDSR)) {
+#   
+#   if(n %in% nestindex  & !is.na(newnewF$newF[n])){
+#     
+#     ndDSR$finalf = newnewF$newF[x]
+#     x = x+1
+#       
+#   }
+#   else{
+#     
+#     ndDSR$finalf = ndDSR$final_fate
+#     
+#   }
+# }
+#----------------------------------------------------------------------------
+```
+```{r}
+# nestindex <- (ndDSR$nest %in% chNests1$nest)
+
+# ndDSR <- ndDSR %>% group_by(nest) %>% summarize(final_fate = last(final_fate),
+#                                                 i          = last(i),
+#                                                 j          = last(j),
+#                                                 k          = last(k),
+#                                                 status     = list(status),
+#                                                 finalf     = last(finalf))
+```
+
+```{r eval=FALSE, include=FALSE}
+ndDSR$nestindex <- (ndDSR$nest %in% chNests1$nest) # index of C-H nests
+nests     <- chNests1$nest                         # numbers of C-H nests
+ndDSR$finalf <- vector(length = nrow(ndDSR))
+
+ndDSR$finalf[nestindex] <- newnewF$newF
+
+for(n in 1:nrow(ndDSR)){
+  
+  # if ndDSR$nestindex 
+  index = nestindex[n]
+  ndDSR$finalf[n] <- n
+  
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+for(n in 1:length(nests)){
+  
+  ndDSR$finalf[ndDSR$nest == nests[n]] = newnewF$newF[n]
+  
+}
+
+ndDSR$finalf[ndDSR$finalf == FALSE] = NA
+# ndDSR$finalf[is.na(ndDSR$finalf)] #= ndDSR$final_fate
+# ndDSR$finalf <- ifelse(is.na(ndDSR$finalf),
+                       # ndDSR$final_fate,
+                       # ndDSR$finalf)
+                       # 
+                       # 
+ndDSR1 <- ndDSR %>% mutate(finalf = ifelse(is.na(finalf),
+                                           final_fate,
+                                           finalf))
+ndDSR1 <- ndDSR1 %>%
+  filter(nestindex) %>% 
+  group_by(nest) %>% 
+  summarize(fate     = last(final_fate),
+            last_status   = last(status),
+            new_fate = last(as.character(finalf)),
+            k        = last(k),
+            ) # %>% 
+  #mutate_if(is.list, ~paste(unlist(.), collapse = ',')) # can't do this after ungrouping
+
+nd <- as.data.frame(ndDSR1)
+nd$notes <- chNests1$notes
+nd$final_obs <- chNests1$final_obs
+
+write.csv(nd, sprintf("output/aband_cattle_%s.csv",now))
+
+
+# for(n in 1:nrow(chNests1)){
+  # 
+# }
+```
+
+AND NOW DO IT FOR CAM NESTS! WOOOHOOOO
+
+```{r eval=FALSE, include=FALSE}
+# ndDSR$finalf[which(nestindex == T)] # this isn't the way to use indices
+  
+# # ndDSR2 <- ungroup(ndDSR)  
+# x=1
+# for(n in 1:nrow(ndDSR)) {
+#   #browser()
+#   if(n %in% nests){ # & !is.na(newnewF$newF[n])){
+#     # ndDSR$finalf <- newnewF$newF
+#     newfate  <- as.character(newnewF$newF[n])
+#     ndDSR$finalf <- newfate
+#     x = x+1
+#     cat("n = ", n, "|| new fate value:", newfate,  "|| x value:", x, "\n")
+#       
+#   }
+#   else{
+#     
+#     ndDSR$finalf = NA 
+#     
+#   }
+# }
+# 
+#   ndDSR$finalf[nestindex]
+# 
+# ndDSR$finalf[7]
+  # 
+  # ndDSR$finalf = ifelse(n %in% nestindex & !is.na(newnewF$newF[n]), 
+  #                       newnewF$newF[x], 
+  #                       ndDSR$final_fate[n])
+  # if(n %in% nestindex) x = x + 1
+  
+#}
+# ndDSR$finalf[nestindex] <- newnewF
+# ndDSR$finalf <- ifelse() 
+# ndDSR$finalf <- ifelse()
+
+
+
+# newNewF <- rbind(ndDSR$final_fate, newF=newF[ndDSR$final_fate])
+# ndDSR <- ndDSR %>%
+  # mutate(finalfate = modifyList(final_fate,newF))
+  # mutate(finalfate = ifelse(final_fate %in% c("A", "Hu") & !is.na(newF),
+                            # newF, 
+                            # final_fate))
+# 
+# check <- ndDSR %>%
+#   group_by(nest) %>%
+#   summarize(final_fate = last(final_fate),
+#             finalfate  = last(finalfate),
+#             status     = list(status))
+# 
+# which(ndDSR$finalfate != ndDSR$final_fate)
+# 
+# table(ndDSR$final_fate)
+
+# so I guess none of them changed? 
+
+```
+```{r}
+# ab <- c()
+# ds <- c()
+# 
+# ndDSR <- nestData %>% 
+#   mutate(final_fate = case_when(
+#     nest %in% ab & final_fate %in% c(5,6) ~ 4,
+#     nest %in% ds & final_fate %in% c(5,6) ~ 5
+#   ), 
+#   cam_fate = case_when(
+#     nest %in% ab & cam_fate %in% c(5,6) ~ 4,
+#     nest %in% ds & cam_fate %in% c(5,6) ~ 5
+#   ))
+```
+
+(Data formatting info from Darrah et al. 2018 supporting information app. S3)
+Read in nest data, which contains one row per observation per nest and the 
+following columns:##
+Nest.ID : factor with unique codes for each nest
+Interval: length of nest check (exposure) interval
+Status: nest status at each nest check. 1 = active, 2 = #depredated, 3 =  
+flooded, 4 = abandoned, 5 = unknown cause #of failure
+Veg.Cover: numeric column with cover categories 0-3
+Habitat: factor column with habitat types
+Exclosed: numeric column with 0 = no exclosure and 1 = #exclosure
+Nest.Initiation: numeric column with Julian day of nest #initiation
+(end extract from Darrah et al. 2018)
+
+The first thing the Darrah script does is make an equivalent to "same_ID", so
+keep that column
+
+For the camera + field dataset, ...
+For the no-camera dataset, fates are as assigned in the field, and k =
+the last day the nest was observed in the field (as in the MARK data).
+
+```{r eval=FALSE, include=FALSE}
+
+ndDSRcam <- ndDSR %>% 
+  mutate(k      = fate_date, 
+         status = ifelse(lastObs == T, cam_fate, status)) %>%
+  select(nest, species, status, obs_int, i, j, k, cov_5m, nest_age, same_ID)
+
+ndDSR <- ndDSR %>%
+  filter(camera == FALSE) %>%
+  select(nest, species, status, obs_int, i, j, k, cov_5m, nest_age, same_ID)
+```
+
+Record the data for the Bayesian DSR model to csv:
+
+```{r eval=FALSE, include=FALSE}
+
+if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename <- paste0("model_data/nest_data_DSR_", now, ".csv")
+write.csv(ndDSR, filename)
+
+filename <- paste0("model_data/nest_data_DSR_cam_",now,".csv")
+write.csv(ndDSRcam, filename)
+
+```
+
+------------------------------------------------------------------------
+
+### Nest Fate Misclassification GLM
+
+Now, the data for the GLM. First, we will select only the cameras with
+nests, because the response variable is fate misclassification
+(difference between camera and field fate).
+
+We then reduce back to one row per nest by condensing the observation
+history to one cell,
+
+```{r eval=FALSE, include=FALSE}
+# filename <- "model_data/all_nest_data_GLM_0823_1555.csv"
+# ndGLM <- read_csv()
+
+nestData <- read_csv("nest_data/nest_data_cleaned_0830_722.csv",
+                     col_types = cols(.default="c"))
+now = format(Sys.time(), "%m%d_%H%M_")
+```
+
+### If not reading in from CSV:
+
+```{r eval=FALSE, include=FALSE}
+ndGLM <- nestData %>% 
+  filter(camera == TRUE) %>% 
+  group_by(nest, site, species) %>%   
+  select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, cam_fate, status, year )%>%
+  summarize(status = list(status), 
+            across(where(is.integer), last),
+            across(where(is.numeric), last),
+            across(where(is.character), first)
+  ) %>%
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|'))
+
+table(ndGLM$species)
+table(ndGLM$site)
+table(ndGLM$year)
+ 
+```
+
+```{r eval=FALSE, include=FALSE}
+howMis <- function(fate, cfate){
+  case_when(
+    #fate == 0                  & cfate %in% c(2,3,4,5,6)     ~ "F", 
+    #fate == 0            & cfate == 1           ~ "M", # fail-unkn -> hatch
+    #fate == 0            & cfate %in% c(1:6)    ~ "M", # fail-unkn -> other
+    #fate == 7            & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    
+    fate %in% c(0:6)  & cfate != fate        ~ "M", # fate    -> other 
+    fate %in% c(7,8)  & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    fate %in% c(0:6)  & cfate == 7           ~ "U"  # unknown cam fate
+  )
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+ndGLM <- ndGLM %>% 
+  mutate(hatchfail = case_when(
+    final_fate %in% c(0, 2:6) ~ 0, # fail
+    final_fate == 1           ~ 1, # hatch
+    final_fate == 7           ~ 7,
+    final_fate == 8           ~ 7,
+    final_fate == NA          ~ 7 # MAKE SURE all of these are coding correctly
+  ),
+  c_hatchfail = case_when(
+    cam_fate %in% c(0, 2:6) ~ 0,
+    cam_fate == 1           ~ 1,
+    cam_fate == 7           ~ 7,  # hopefully not many/any of either of these
+    #cam_fate == NA          ~ 7   # this one doesn't work - oh duh
+    is.na(cam_fate)         ~ 7
+    # remove cam_fate == 7?
+  )) %>%
+  mutate(HF_mis = case_when(
+    c_hatchfail == 7 | hatchfail == 7 ~NA,
+    c_hatchfail == hatchfail ~ 0, # nest wasn't misclassified
+    c_hatchfail != hatchfail ~ 1  # nest was misclassified
+  )) %>%
+  mutate(HF_mis = ifelse(c_hatchfail == 7, NA, HF_mis),
+         HF     = case_when(
+           hatchfail == 0 & c_hatchfail == 1 ~ 101,
+           hatchfail == 1 & c_hatchfail == 0 ~ 110
+         )) # camera H/F unknown
+  
+  
+```
+
+```{r eval=FALSE, include=FALSE}
+ndGLM <- ndGLM %>% 
+  mutate(misclass = case_when(
+    cam_fate == 7 ~ NA,
+    final_fate == cam_fate ~ 1, # nest wasn't misclassified
+    final_fate != cam_fate ~ 0   # nest was misclassified
+  ) ) %>%
+  mutate(how_mis = 
+           case_when(misclass==0                 ~ howMis(final_fate, cam_fate),
+                     misclass==1 & final_fate==7 ~ "U", 
+                     misclass==1 & final_fate!=7 ~ "C"))
+
+
+hmNA <- ndGLM$nest[which(is.na(ndGLM$how_mis))]
+
+fates <- ndGLM %>% 
+  select(nest,final_fate,cam_fate, misclass, how_mis, hatchfail, c_hatchfail, HF_mis, nest_age, fate_date)
+```
+
+```{r eval=FALSE, include=FALSE}
+
+ndGLM_ <- ndGLM
+camFateNA    <- ndGLM_$nest[which(is.na(ndGLM_$cam_fate))]  # 44 total, now 30
+fate_dateNA  <- ndGLM_$nest[which(is.na(ndGLM_$fate_date))] # 50 total, now 44
+is.na <- union(camFateNA, fate_dateNA)
+
+nest_ageNA   <- ndGLM_$nest[which(is.na(ndGLM_$nest_age))]  # 66 total, now 31
+is.na <- union(is.na, nest_ageNA) # 72 total nests to exclude-that's almost half
+
+wmNA  <- ndGLM_$nest[which(is.na(ndGLM_$HF_mis))] 
+is.na <- union(is.na, wmNA)
+
+numNA <- length(is.na)
+```
+
+```{r eval=FALSE, include=FALSE}
+
+# if(file.exists("model_data") == FALSE) dir.create("model_data")
+
+filename4 <- paste0("model_data/all_nest_data_GLM_", now, ".csv")
+# will give error if "now" has not been created
+
+write.csv(ndGLM_, filename4, row.names = FALSE)
+```
+
+# 
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

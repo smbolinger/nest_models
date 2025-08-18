@@ -1,0 +1,1287 @@
+---
+title: "Nest GLM"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## Introduction
+
+What to do with this script:
+
+1. Choose the data to load under section 1a
+2. Decide how many categories you want to use for nest fate in section 1e
+3. Check the models that will be fitted in section 3
+
+I think it makes sense to keep the filtering function in the code for now? Easier to
+edit it on the fly. Also, some of the dplyr stuff gets a little dicey in a custom package. 
+Specifically, lines with across and last, like this:
+              across(where(is.integer), last), # now they are all chr
+
+```{r setup, include=FALSE}
+# remove(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+
+# library(AICcmodavg)
+library(bbmle)
+library(brglm2) # penalized logistic regression
+# library(car)
+# library(detectseparation)
+# library(elrm)
+library(gt)
+library(gtsummary)
+# library(howManyImputations)
+# library(insight) # to get the df for the imputed models
+# library(lattice) # for some imputation operations
+# library(logistf)
+# library(mice) # multiple imputation
+# library(MASS)
+library(nestGLM)
+# library(patchwork)
+library(stats)
+library(tidyverse)
+# library(visdat)   # visualize all data and number missing
+```
+
+## 0. SETUP
+
+### a. Set some values
+
+```{r set-values, echo=FALSE}
+homeDir <- "C:/Users/sarah/Dropbox/nest_models/"
+
+predictors <- c("nest_age", "obs_int", "fdate") # numeric predictors to be used
+prList     <- as.list(predictors)
+prLabs <-  c("Nest Age (Days)", 
+             "Final Interval (Days)",
+             "Day of Season")
+prNames <- c("NEST_AGE", "FINAL_INTERVAL", "END_DATE")
+# names(predictors) <- prLabs
+names(prList) <- prNames
+now = format(Sys.time(), "_%m%d_%H%M_")
+
+# filename <- paste0(homeDir,"glm_script/import_data_", now, ".csv")
+# cat("import file name:", filename)
+cat("homeDir =", homeDir, "|| now =", now,"\n\npredictor variables:\n\n")
+print(prList)
+
+# now some files are saved under GLM_script and some under nest_models...
+
+```
+
+### b. Create functions
+
+#### Filter function
+
+
+```{r filter-function, echo=TRUE}
+filter_dat1 <- function(nestData, sites=c("RUTE","RUTW"), spp=c("LETE","CONI"),
+                        # cam_nest=TRUE,
+                        cam_vect=c("Y","y"),  debug=FALSE, grouped=FALSE){
+  # cam_str <- c("Y","y")
+  # if (all_cam) cam_str <- c("Y","y","Y*")
+  if (debug) cat("camera strings:", cam_vect,"\n\n")
+  ndGLM <- nestData %>%
+
+    # mutate(fdate=final_obs_date) %>%    # this is also done later?
+    mutate(
+      fate = case_match(field_fate,
+                                   "H"   ~ 1,
+                                   "F"   ~ 0,
+                                   "D"   ~ 2,
+                                   "S"   ~ 3,
+                                   "A"   ~ 4,
+                                   "Hu"  ~ 5,
+                                   "Ca"  ~ 6,
+                                   "U"   ~ 7,
+                                   "U?"  ~ 7,
+                                   "U-H" ~ 8
+           ),
+
+           cfate = case_match(cam_fate,
+                                 "H"  ~ 1,
+                                 "F"  ~ 0,
+                                 "D"  ~ 2,
+                                 "S"  ~ 3,
+                                 "A"  ~ 4,
+                                 "Hu" ~ 5,
+                                 "Ca" ~ 6,
+                                 "U"  ~ 7
+           ),
+           camera = ifelse(camera %in% cam_vect, TRUE, FALSE)
+
+    ) %>%
+
+    filter(site %in% sites) %>%
+    # filter(species %in% c("CONI", "LETE")) %>%
+    filter(species %in% spp) %>%
+    filter(camera == TRUE)
+
+  if(grouped==F){
+    ndGLM <- ndGLM %>%
+    # select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, fate, cam_fate, cfate, status, year )%>%
+    group_by(nest)  %>%
+    # dplyr::select(nest, site, species, fdate, fate_date, nest_age, obs_int, i, j, k, fate, final_fate, final_fateUH, cfate, cam_fate, status, year )%>%
+    # dplyr::select(nest, site, species, fdate, fate_date, nest_age, obs_int, i, j, k, field_fate, fate, final_fate, cfate, cam_fate, status, year )%>%
+    dplyr::select(nest, site, species, fdate, nest_age, obs_int, i, j, k, field_fate, fate, final_fate, cfate, cam_fate, status, year )%>%
+    summarize(status = list(status),
+              across(where(is.integer), last), # now they are all chr
+              across(where(is.numeric), last),
+              across(where(is.character), last) # summarize already goes rowwise
+    ) %>%
+    rowwise() %>%
+    mutate_if(is.list, ~paste(unlist(.), collapse = '|'))
+
+  }
+
+  cat("Make sure you've selected the correct values:\n\n")
+  # cat("\nSpecies:\n" )
+  print(table(ndGLM$species))
+  # cat("\nSite:\n")
+  print(table(ndGLM$site))
+  # cat("\nYear:\n")
+  print(table(ndGLM$year))
+  cat("\nHow many NAs are there in camera fate?\n", sum(is.na(ndGLM$cfate)), "\n")
+  cat("\nAnd in nest age?\n", sum(is.na(ndGLM$nest_age)), "\n")
+
+  return(ndGLM)
+}
+```
+
+
+
+#### add field fate function
+```{r include=FALSE}
+ff <- function(nData){
+    cat("*** adding field fate category ***\n")
+  cat("old final_fate category:\n")
+  table(nData$final_fate)
+  nData <- nData %>%
+    mutate(field_fate = final_fate) %>%
+    mutate(final_fate = coalesce(cam_fate, field_fate )) 
+  cat("new final_fate category:\n")
+  table(nData$final_fate)
+  cat("new field_fate category:\n")
+  table(nData$field_fate)
+  
+  nData$fdate <- nData$k
+}
+```
+
+##*
+------------------------------------------------------------------------
+
+## 1. DATA
+
+### a. Data settings: handling U-H/U-F values, etc
+
+View the code to see the settings for this run.
+
+```{r data-settings, echo=FALSE}
+
+# old_data = TRUE
+old_data = FALSE
+
+# if(TRUE){
+if(FALSE){
+  UHisH = TRUE
+  UFisF = TRUE
+} else {
+  UHisH = FALSE
+  UFisF = FALSE
+}
+
+# feb = TRUE
+feb = FALSE
+
+addFieldFate = FALSE
+
+grouped = TRUE
+
+plots1 = FALSE
+# plots2 = TRUE
+
+# compare = TRUE
+compare = FALSE
+
+# debug = TRUE
+debug = FALSE
+
+# missing_diag = TRUE
+missing_diag = FALSE
+
+# separation = TRUE
+separation = FALSE
+
+# cam_str <- c("Y", "y", "Y*") # including all cams seems to make delta AIC smaller
+cam_str <- c("Y", "y", "Y*", "Y.") # including all cams seems to make delta AIC smaller
+# cam_str <- c("Y", "y", "Y*", "Y?")
+# cam_str <- c("Y", "y")
+
+sites_sel <- c("RUTE", "RUTW")
+
+spp_sel <- c("LETE", "CONI")
+# 
+# # mget gives you a named list if you give it object names as strings!
+# settings <- mget(c("old_data","UHisH", "UFisF", "feb", "addFieldFate", 
+#                    "compare",  "debug", "grouped", "missing_diag", "separation",
+#                    "cam_str", "sites_sel", "spp_sel"))
+# 
+# cat("SETTINGS:")
+# print(settings)
+
+```
+
+
+### b. Load cleaned data:
+
+To run python code need reticulate package.
+
+```{r load-data, echo=FALSE}
+
+# if(FALSE){
+if(old_data){
+  filename <- paste0(homeDir,"nest_data/nest_data_cleaned_0227_1740_.csv")
+  addFieldFate = TRUE
+  grouped      = FALSE
+  compare      = FALSE
+} else {
+  # filename <- read_file(paste0(homeDir,"filename_cleaned.txt"))
+  # filename <- read_file(paste0(homeDir,"nest_data/nest_data_grouped_0805_1225_edit.csv"))
+  # filename <- paste0(homeDir,"nest_data/nest_data_grouped_0805_1225_edit3.csv")
+  filename <- paste0(homeDir,read_file(paste0(homeDir, "nest_data/import_name.txt")))
+}
+# if(debug) cat("importing from:",filename,"\n\n")
+cat("importing from:",filename,"\n\n")
+# nData <- read_csv(filename)[-1]
+nData <- read_csv(filename)
+
+```
+
+### c. Filter data and specify which columns to use for variables
+
+Can use the feb values, but remember different nests were also included
+
+```{r choose-var-values, echo=TRUE}
+if(old_data){
+  # cat("using old data")
+  nData$fdate <- nData$k
+  ff(nData) # add a field fate column
+} else {
+  nData$fdate <- nData$final_obs_date
+  nData$final_fate <- nData$final_fate2
+  # nData$field_fate <- nData$field_fate2
+  nData$field_fate <- nData$field_fate3
+  if(feb==TRUE){
+    # cat("using february data")
+    nData$obs_int <- nData$final_obs_int_feb
+    nData$nest_age <- nData$nest_age_feb
+    nData$cam_fate   <- nData$cam_fate_feb
+  } else  {
+    # cat("using regular data")
+    # nData$obs_int <- nData$final_obs_int
+    nData$obs_int <- nData$final_obs_int2
+    nData$nest_age <- nData$nest_age1 # nest age based on actual obs date
+    # nData$nest_age <- nData$nest_age2 # nest age based on hatch date
+    nData$cam_fate   <- nData$cam_fate2
+  }
+}
+# cat("Nest age values:\n")
+# table(nData$nest_age)
+```
+
+
+```{r filter-data}
+nd <- nData %>%
+  filter(nest!=20365) %>% # found on hatch day
+  filter( nest!=20259) %>% # NA for final_obs_int
+  # mutate(field_fate = ifelse(nest==10235,"H",field_fate)) %>%
+  # filter_dat(all_cam=all_cam, debug=T, grouped=T)
+  # filter_dat(all_cam=all_cam, debug=debug, grouped=grouped)
+  filter_dat1(cam_vect=cam_str, debug=debug, grouped=grouped, # filters for cam nests by default
+             # spp=c("LETE", "CONI"), sites_sel=c("RUTE", "RUTW"))
+             # spp=spp_sel, sites_sel=sites_sel)
+             spp=spp_sel, sites=sites_sel)
+
+```
+
+How many NAs should there be in (camera) nest fate?
+
+2021: 2
+2020: 5
+2019: 6
+
+and nest age (of the remaining nests)?
+
+2021: 13
+2020: 1
+2019: 2
+
+
+
+
+
+```{r UHF-values, eval=FALSE, include=FALSE}
+#### d. Decide how to deal with U-H and U-F values
+# 
+# See notes. I guess most 2020 nests were assumed to have hatched if they reached the estimated hatch date with no signs of predation? 
+# But 20264 and 424 were already 2 days past est hatch on penultimate visit (and still had eggs); well past it on final. 
+nd %>% filter(fate == 8) %>% select(nest, field_fate, cam_fate, fate, cfate)
+nd %>% filter(field_fate %in% c("U-H","U-F", "U-A", "U-D")) %>% 
+  select(nest, field_fate, cam_fate, fate, cfate)
+```
+
+
+```{r UHF-values2, echo=FALSE}
+if(UHisH == FALSE){
+  # makeU <- c(10235,10206,20260,30421,30932,30950)
+  # makeU <- c(20260,20264,20424,30932,30950)
+  # makeU <- c(30932,30950)
+  # makeU <- c(20260,20322,30932,30934,30950,10258)
+  # makeU <- c(20260,20322,30932,30934,30950,10258)
+  makeU <- c(20260,20322,30932,30950,10258)
+  # makeU <- c(10206,20260,30932,30950, 10240, 10242, 30917)
+  # makeU <- c(10206,20260,30932,30950, 30917)
+  cat("make U:", makeU)
+  # makeU <- c(10225,20260,30932,30950)
+  makeA <- c(30934)
+  # makeA <- c(NA)
+  makeF <- c(10242,10240)
+  # makeA <- c(20322)
+  # makeU <- c()
+  makeH <- c(
+    # 10127,10206,20218,20251,20263,20264,20266,20400,20405,20424,20460,30421, 30917,30938, 10235
+    10127,20218,20251,20263,20266,20400,20405,20460,30421,30938, 10235, 20264, 20424,30917, 10206
+    # 10127,10206,20218,20251,20263,20266,20400,20405,20460,30421,30917,30938,10235
+    )
+  # makeH <- c(10127,20218,20251,20263,20264,20266,20400,20405,20424,20460,30421,30938)
+  cat("make H:", makeH)
+  # makeH <- c(10127,10206,20218,20251,20263,20264,20266,20400,20405,20424,20460,30938,10235,20260,30421,30932)
+  
+  nd <- nd %>%
+    mutate(fate = case_when(nest %in% makeU ~ 7,
+                            nest %in% makeH ~ 1,
+                            nest %in% makeA ~ 4,
+                            nest %in% makeF ~ 0,
+                            .default = fate))
+  # nd %>% filter(fate == 8) %>% select(nest)
+  nd %>% filter(field_fate %in% c("U-H", "U-A", "U-F", "U-D")) %>% select(nest, field_fate, cam_fate, fate, cfate)
+  # nd %>% filter(nest %in% makeU) %>% select(fate, field_fate, final_fate)
+  # nd %>% filter(nest %in% makeH) %>% select(fate, field_fate, final_fate)
+  # nd %>% filter(nest %in% makeA) %>% select(fate, field_fate, final_fate)
+                # camera     == "Y")
+}
+if(UHisH == TRUE){
+  nd$fate[nd$fate==8]=1
+}
+# nd %>% filter(field_fate %in% c("U-F", "U-A", "U-D")) %>% select(nest, site, species, year, fdate, nest_age, fate, cfate, final_fate)
+```
+
+### e.  Add the response vars:
+
+```{r add-response, echo=TRUE}
+# ndGLM1 <- as.data.frame(add_vars(nd, debug=T))
+ndGLM1 <- as.data.frame(add_vars(nd,
+                                 # UHisH = UHisH,
+                                 # UFisF =UFisF,
+                                 debug=T))
+# ndGLM1 <- ndGLM1 %>% select(nest, status, species, field_fate, cam_fate, final_fate, fate_date, fdate, nest_age, obs_int, how_mis, HF_mis, misclass, is_u, hatchfail, c_hatchfail, fate, cfate)
+ndGLM1 <- ndGLM1 %>% select(nest, species, field_fate, cam_fate, final_fate, estHD, k_adj, fdate, nest_age, obs_int, how_mis, HF_mis, misclass, is_u, hatchfail, c_hatchfail, fate, cfate)
+if(TRUE){
+# if(FALSE){
+  ndGLM1 %>% select(nest, species, field_fate, cam_fate, fate, cfate, hatchfail, c_hatchfail, HF_mis, is_u) %>% write.csv(paste0("fates",now,".csv"))
+}
+
+print_vars(ndGLM1)
+
+```
+
+
+------------------------------------------------------------------------
+##*
+------------------------------------------------------------------------
+
+## 2. DIAGNOSTICS  
+
+I moved some of these to fate_GLM_extras; can run them as a child
+
+### a. Specify the data and variables to use
+
+```{r names-1, eval=FALSE, include=FALSE}
+# This is mostly for naming files in an informative way.
+
+datName = "ndGLM1"
+# datName = "ndGLM_"
+dat = get(datName)
+
+prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
+if(UHisH == TRUE & UFisF == TRUE){
+  uVar <- "UHFisHF" 
+}else{
+  uVar <- ""
+}
+
+fname <- paste("nest_data/",datName, uVar, now, ".csv", sep="_")
+write.csv(ndGLM1, fname)
+# number of fate categories:
+# fVar <- paste0("-",nfate,"fates")
+```
+
+
+
+```{r, child=if(missing_diag | separation) 'diagnostics.Rmd'}
+
+```
+
+```{r, child = if(plots1) 'fate_GLM_plots_tables.Rmd'}
+
+```
+
+
+
+
+##*
+------------------------------------------------------------------------
+
+## 3. PREPARE DATA FOR MODEL
+
+### a. Look at/edit individual nests or groups of nests (OPTIONAL)
+
+```{r examine-full-data, eval=FALSE, include=FALSE}
+nestNum <- 30959
+as.vector(ndGLM1[ndGLM1$nest==nestNum,])
+
+ndGLM1$nest_age[ndGLM1$nest==30959] = 20
+
+ndGLM1$fate_date[ndGLM1$nest %in% justFDate]
+# ndGLM1[2,]
+```
+
+
+
+### b. Edit the data again to remove rows missing camera fate:
+
+Remove the rows missing camera fate, which is a categorical var
+
+Also, examine the missing values.
+
+```{r remove-NA-fate}
+ndGLM_miss1 <- dat_miss(ndGLM1) # moved this elsewhere because it is used there
+# ndGLM1$obs_int[ndGLM1$obs_int>12] = 10
+
+ndGLM_red <- ndGLM1[!is.na(ndGLM1$cam_fate),]
+ndGLM_red <- ndGLM_red[ndGLM_red$cam_fate!="U",]
+ndGLM_red$nest[is.na(ndGLM_red$misclass)] 
+ndGLM_red$misclass[is.na(ndGLM_red$misclass)] = 0 
+
+ndGLM_miss <- dat_miss(ndGLM_red)
+```
+
+
+### c. Edit and refactor the data:
+
+This creaes the dataset to be used for the imputation
+
+```{r set-types}
+# ndGLM_miss <- dat_miss(ndGLM1)
+
+ndGLM_red <- ndGLM_red %>%
+  set_var_types() %>%
+  # refactor(num_fate=4) %>%
+  # refactor(num_fate=6) %>%
+  mutate(mclass = misclass == 1,
+         isu    = is_u == 1) %>%
+  mutate(across(c(isu, mclass), as.factor))
+
+# ndGLM_red$species <- relevel(ndGLM_red$species, ref="LETE")
+
+print_vars(ndGLM_red)
+```
+
+
+```{r fate-cat}
+nfate=6
+ndGLM_ <- ndGLM_red %>%
+  refactor(num_fate=nfate) 
+levels(ndGLM_$cam_fate)
+  
+ndGLM_ %>% sapply(function(x) sum(is.na(x)))
+var <- "nest_age"
+stillMissing <- ndGLM_$nest[which(is.na(ndGLM_[[var]]))]
+
+
+# ndGLM4 <- ndGLM_red %>%
+#   refactor(num_fate=4) 
+#   
+# ndGLM3 <- ndGLM_red %>%
+#   refactor(num_fate=3) 
+```
+
+### f. Compare dataframes  *optional* :
+
+The old one didn't have the same columns; need to add some...
+
+- add field_fate and change final_fate
+
+Maybe better comparison after removing the unknown fate nests
+
+```{r, child=if(compare) 'compare.Rmd'}
+
+```
+##*
+------------------------------------------------------------------------
+
+## 4. VISUALIZE DATA AFTER REMOVING NAs AND EDITING
+
+### a. Specify the name of the data being used so the file outputs are named accordingly.
+
+```{r names-2}
+# datName <- "ndGLM_feb_cc"
+# datName <- "ndGLM_cc"
+datName <- "ndGLM_"
+dat     <- get(datName)
+# are U-H and U-fF treated as H and F, respectively?
+if(UHisH == TRUE & UFisF == TRUE){
+  uVar <- "UHFisHF" 
+}else{
+  uVar <- ""
+}
+# number of fate categories:
+fVar <- paste0("-",nfate,"fates")
+
+# this was to create data to use in the package:
+# fn <- paste0("C:/Users/sarah/Dropbox/Models/nestGLM/","nestDat.csv" )
+# write.csv(dat,file=fn)
+```
+
+
+### b. Examine data - Frequency tables:
+
+```{r frtab2, echo=TRUE}
+# tabb <- fr_tab(ndGLM4)
+# tabbb <- fr_tab(ndGLM6)
+# datName <- "ndGLM_feb_cc"
+# tabbbb <- fr_tab(ndGLM_unscl_cc, vars="misclass")
+# suff <- paste0("_ndGLMcc_UHisH_UFisF-","")
+# suff <- paste0("_ndGLMcc")
+
+suff <- paste0("_",datName,"_",uVar, fVar)
+# tabbbb <- fr_tab(ndGLM_cc, vars="HF_mis",suffix = suff)
+tabbbb <- fr_tab(dat, vars="HF_mis",suffix = suff)
+# why does the complete cases dataframe have missing values for HF_mis?
+knitr::include_graphics(paste0("analysis/",tabbbb), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+
+### c. Create more histograms:
+
+Choose x-axis limits and bin width:
+
+```{r plot-params2, echo=FALSE}
+# brLabels <- c(0,2,4,6,8,10)
+# dat <- ndGLM_unscl_cc
+varss <- c("nest_age", "obs_int", "fdate")
+cat("max values:\n")
+# sapply(varss, function(x) max(ndGLM_cc[[x]], na.rm=TRUE))
+sapply(varss, function(x) max(dat[[x]], na.rm=TRUE))
+cat("\nand suggested bin width:\n")
+# freedman diaconis rule for bin width
+# fdBins <- sapply(varss, 
+# sapply(varss,  function(x) 2* ( (IQR(dat[[x]])) / (length(dat)^(1/3)) ) )
+sapply(varss,  
+       # function(x) 2*((IQR(ndGLM_unscl_cc[[x]])) / (length(ndGLM_unscl_cc)^(1/3))) # length here is # columns
+       function(x) 2*((IQR(dat[[x]], na.rm = TRUE)) / (length(dat[[x]])^(1/3)))
+       )
+```
+
+
+```{r isu-plot2}
+# hist(ndGLM_unscl_cc$nest_age, breaks="FD")
+catPlotU <- plot_predictors(resp="is_u",
+                     dat=dat,
+                     vars = c("nest_age", "obs_int", "fdate"),
+                     filTit    = "Nest Fate",
+                     filLabs   = c("Classifiable\nin Field", 
+                                   "Not Classifiable\nin Field"), 
+                     filColors = c("#88CCEE", "#AA4499"),
+                     # filColors = c("green", "#AA4499"),
+                     xLabs     = c("Nest Age (Days)", 
+                                   "Final Interval (Days)",
+                                   "Day of Season"),
+                     yLab      = "Count",
+                     # xMaxVect = c(32, 10, 120),
+                     # xMaxVect = c(32, 8, 120),
+                     xMaxVect = c(32, 11, 120),
+                     binWidthVect = c(3, 1, 12),
+                     # suffix="UHisH_UFisF"
+                     suffix=paste0(datName, uVar, fVar)
+                     )#,
+                     # br    = brLabels)
+                     # brLabs    = brLabels)
+# fname <- paste0("catplot",)
+# ggsave("catplot_isu_NAremoved.svg",
+#        plot=catPlotU,
+#        device="svg",
+#        width=24,
+#        height=8,
+#        units="cm"
+#        )
+```
+
+
+```{r HFmis-plot2}
+resp <- "HF_mis"
+# resp <- "misclass"
+catPlotMis <- plot_predictors(resp   = resp,
+                    dat  = dat,
+                    vars      = c("nest_age", "obs_int", "fdate"),
+                    filTit    = "Nest Fate",
+                    filLabs   = c("Correctly\nClassified", "Incorrectly\nClassified"),
+                    filColors = c("#44AA99", "#EE7733"),
+                    xLabs     = c("Nest Age (Days)", 
+                                  "Final Interval (Days)",
+                                  "Day of Season"),
+                    yLab      = "Count",
+                     # xMaxVect = c(32, 10, 120),
+                     xMaxVect = c(32, 11, 120),
+                     binWidthVect = c(3, 1, 12),
+                     suffix=paste0(datName, uVar, fVar)
+                    )
+                    # suffix="UHisH_UFisF")#,
+# 
+# ggsave(sprintf("catplot_%s_NAremoved.svg", resp),
+#        plot=catPlotMis,
+#        device="svg",
+#        width=24,
+#        height=8,
+#        units="cm"
+#         )
+# resp <- NULL
+```
+
+
+### d. Create more scatterplots:
+```{r}
+# names(pairList)
+# pairList <- combn(predictors, m=2, simplify=F)
+# spc <- 
+pairList <- combn(prList, m=2, simplify=F)
+plList <- lapply(pairList, function(x){
+  # ggplot(data=dat, aes(x=get(x[1]), y=get(x[2])) ) +
+  ggplot(data=dat, aes(x=get(x[[1]]), y=get(x[[2]])) ) +
+    geom_point() +
+    geom_smooth(method=lm) +
+    # ggpmisc::stat_poly_eq() +
+    xlab(names(x)[1]) +
+    ylab(names(x)[2]) +
+    # ggtitle("Correlation Plots - NA removed")+
+    # ggpubr::stat_cor( geom="label", label.x.npc = "middle", label.y.npc = "top") #+
+    ggpubr::stat_cor( geom="label", label.y.npc = "top", size=6, face="bold") +
+    theme_classic() +
+    theme(axis.text = element_text(size=14),
+        axis.title = element_text(size=16), # can't do margins for x and y axis titles at once
+        axis.title.y = element_text(margin=margin(r=5)),
+        axis.title.x = element_text(margin=margin(t=5))) +
+        # plot.margin=margin(c(0.3,1,0.3,0.1), "cm")
+    # theme( plot.margin=unit(c(1,0.5,1,0.5), "cm") ) # margins for 3-column arrangment
+    theme( plot.margin=unit(c(0.5,1,0.5,1), "cm") ) # margins for 3-row arrangement
+    # theme(panel.background = element_rect(fill="lightgray", alpha=0.5))
+  })
+# dsgn <- "AB
+#          C#"
+# pl <- patchwork::wrap_plots(plList)
+pl <- patchwork::wrap_plots(plList,
+                            ncol=2,
+                            nrow=2)
+                            # design=dsgn)
+# add plot margin after assembly?
+# pl <- pl + theme( plot.margin=margin(c(1,1,1,0), "cm"))
+# ggsave(filename=paste0("corrPlot", now, ".svg"))
+pl
+
+now = format(Sys.time(), "_%m%d_%H%M_")
+
+fname <- paste0(homeDir, "figures/corr_plot_cc_", now, ".svg")
+# ggsave(fname, plot=pl, width=9, height=3)
+ggsave(fname, plot=pl, width=10, height=10)
+```
+
+
+
+```{r correlation-plots-2, eval=FALSE, include=FALSE}
+library("PerformanceAnalytics")
+cormat <- dat |> 
+  select(nest_age, obs_int, fdate) |>
+  data.matrix() |>
+  chart.Correlation(histogram=T)
+```
+
+### Separation & missing data diagnostics (optional)
+```{r, child=if(missing_diag | separation) 'diagnostics.Rmd'}
+
+```
+### More tables:
+
+```{r eval=FALSE, include=FALSE}
+# fail <- c("S","F","Hu","D","A")
+fail <- c(0,2:6)
+corr_fate <- ndGLM_ %>% 
+  # filter(HF_mis==1) %>%
+  filter(misclass==1) %>%
+  mutate(
+    correction = case_when(
+      fate == 7 & cfate %in% fail ~ "U to F",
+      fate == 7 & cfate == 1 ~ "U to H",
+      fate == 1 & cfate %in% fail ~ "H to F",
+      fate %in% fail & cfate == 1 ~ "F to H",
+      fate %in% fail & fate != cfate ~ "cause of fail"
+    )) %>% select(nest, species, field_fate, cam_fate, correction)
+
+cat("nests marked unknown that actually failed:\n", 
+    corr_fate$nest[corr_fate$correction=="U to F"])
+cat("\n\nnests marked unknown that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="U to H"])
+cat("\n\nnests marked failed that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="F to H"])
+cat("\n\nnests marked hatched that actually failed:\n",
+    corr_fate$nest[corr_fate$correction=="H to F"])
+    # correction = case_when(
+    #   field_fate == "U" & cam_fate == "H" ~ "U to H",
+    #   field_fate == "U" & cam_fate %in% fail  ~ "U to F",
+    #   field_fate %in% fail & cam_fate == "H" ~ "F to H",
+    #   field_fate == "H" & cam_fate %in% fail ~ "H to F"
+    # )
+  # )
+  
+```
+
+Estimate bias for hatch date:
+
+```{r eval=FALSE, include=FALSE}
+est_hatch <- ndGLM_$estHD[ndGLM_$cam_fate=="H"]
+names(est_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+
+true_hatch <- ndGLM_$k_adj[ndGLM_$cam_fate=="H"]
+names(true_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+plot(x=est_hatch, y=true_hatch)
+# mtr <- caret::confusionMatrix(est_hatch, true_hatch)
+# as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+# 
+# est_hatch <- ndGLM_ %>%
+#   filter(!is.na())
+```
+
+
+##*
+------------------------------------------------------------------------
+
+## 5. RUN THE MODELS
+### a. Create the complete cases dataframe
+
+
+
+```{r rem-NA, include=FALSE}
+### Choose which data to use (how many nest fate categories)
+# ndGLM_unscl <- ndGLM 
+# ndGLM_unscl <- ndGLM6  %>% select(
+# ndGLM_unscl <- ndGLM_  %>% select(s
+# ndGLM_ <- ndGLM_ 
+  # set_var_types() %>%
+  # refactor(num_fate=4)
+
+
+# ndGLM_unscl_cc <- ndGLM_unscl %>% # I don't know why this isn't working
+ndGLM_cc <- ndGLM_  %>%
+  select(
+    nest, is_u, HF_mis, misclass, species, cam_fate, nest_age,
+    fdate, obs_int
+) %>% # I don't know why this isn't working
+  remove_na(allNA = ndGLM_miss)
+
+print_vars(ndGLM_cc)
+# ndGLM_unscl_cc %>% sapply(function(x) sum(is.na(x)))
+```
+
+### b. Create scaled dataframe:
+
+```{r scale-df, echo=TRUE}
+# ndGLM_scl <- ndGLM1 %>%
+ndGLM_scl <- ndGLM_ %>%
+  # set_var_types() %>%
+  # refactor(num_fate=4)%>%
+  # scale( center=TRUE, scale=FALSE)
+  mutate(across(predictors, function(x) as.numeric(scale(x,scale=F)))) #%>%
+ndGLM_scl_cc <- ndGLM_scl %>% remove_na(allNA = ndGLM_miss)
+```
+
+
+### c. Define the models that will be compared:
+
+THey aren't ONLY the models I initially had hypotheses about, BUT we are also not fishing through every possible model. 
+
+```{r formulas, echo=FALSE}
+# resp="is_u"
+modList <- c()
+modList <- c(
+  "~ species + nest_age + fdate + cam_fate + obs_int",
+  "~ 1",
+  "~ species + nest_age + fdate + obs_int",
+  # "~ species + cam_fate * nest_age + fdate + obs_int",
+  # "~ species * cam_fate + nest_age + fdate + obs_int",
+  "~ species * obs_int + cam_fate + nest_age + fdate ",
+  # "~ species + cam_fate + fdate + obs_int * nest_age ",
+  # "~ species + nest_age + fdate + obs_int * cam_fate",
+  "~ nest_age * species + fdate + obs_int + cam_fate",
+  # "~ species + cam_fate + nest_age + obs_int * fdate"
+  # "~ species * fdate + cam_fate + nest_age + obs_int"
+  # "~ species + nest_age + cam_fate + obs_int",
+  # "~ species * nest_age + cam_fate + obs_int",
+  # "~ species + cam_fate * nest_age + obs_int",
+  # "~ species * obs_int + cam_fate + nest_age ",
+  # "~ species + cam_fate + obs_int * nest_age ",
+  # "~ species + nest_age + obs_int * cam_fate",
+  "~ species + nest_age + cam_fate + fdate",
+  "~ nest_age + cam_fate + fdate + obs_int",
+  "~ nest_age + cam_fate + fdate"
+  # "~ species + nest_age + cam_fate",
+  # "~ species * nest_age + cam_fate",
+  # "~ species + nest_age * cam_fate",
+  # "~ species + nest_age ",
+  # "~ species * nest_age ",
+  # "~ nest_age "
+  
+)
+
+# glmFit <- glm(formula="isu ~ species * nest_age + fdate + obs_int + cam_fate", 
+#               family = binomial(), 
+#               data = ndGLM_unscl_cc)
+```
+
+### d. Define the data and vars that will be used:
+Put the name of the dataframe so it can be used in the file naming.
+Also lets you choose the response variable for question 2 (HF_mis or misclass) and the method to use for the logistic regression
+
+```{r mod-data}
+
+# datName      <- "ndGLM_cc"
+datName      <- "ndGLM_scl_cc"
+# datNameImp   <- "ndGLM_"
+datNameImp   <- "ndGLM_scl"
+# datName      <- "ndGLM_feb_cc"
+# datNameImp   <- "ndGLM_2"
+resp1   <- "is_u"
+resp2   <- "HF_mis"
+# resp2   <- "misclass"
+# met     <- "glm.fit"
+# met     <- "jeffreys"
+met     <- "brglm2"
+
+# impRes <- ndGLM_red %>%
+imppDat <- get(datNameImp)
+cat("imputation using this data:", datNameImp)
+```
+
+
+------------------------------------------------------------------------
+##*
+------------------------------------------------------------------------
+
+## QUESTION 1: What affects whether nest fate is classifiable from field evidence?
+
+AKA is there field evidence or not
+
+Think about which interactions make sense in answering this question
+
+-   Response: is_u
+
+Interaction models
+
+-   What interactions make biological sense?
+
+species \* age \| species \* obsint \| species \* fate age \* obsint \|
+age \* fate \| obsint \* date \| obsint \* fate
+
+Can I actually predict the magnitude/direction of the interaction for
+them?
+
+*Even if the model numbers are not sequential, will still work (see code
+later on)*
+
+brglmFit does the Firth penalization by default Firth's logistic
+regression is best for explanatory; adds bias to predictions
+
+### Analysis (complete cases)
+
+Make sure there are no warnings.
+
+#### Run the normal analysis:
+
+```{r q1}
+question <- "Was nest fate classifiable in the field?"
+
+# dat <- parse(datName) # this one appears to be for files
+dat <- get(datName)
+mods <- list()
+
+cat(question)
+cat("\n\nData used:", datName)
+cat("\n\nNumber of fate categories:", length(levels(dat$cam_fate)))
+cat("\n\nRESPONSE VAR:",resp1)
+# mods <- run_models(dataMod=dat, resp="is_u", modlist=modList)
+# cat("\n\nclassifiable / not classifiable in field")
+# table(ndGLM_unscl_cc$is_u)
+
+# mods <- run_models(dataMod=dat, resp="is_u", modlist=modList, met="brglm2", iter=500000)
+# mods <- run_models(dataMod=dat, resp="is_u", modlist=modList, met="jeffreys")
+# mods <- run_models(dataMod=dat, resp=resp1, met="glm.fit", modlist=modList)
+mods <- run_models(dataMod=dat, resp=resp1, met=met, modlist=modList)
+# write.csv(ndGLM_cc, "nestdata2_.csv")
+# sjPlot::plot_model(mods[[5]], type="int")
+```
+
+#### Create and save the AIC table
+
+```{r q1-aic, echo=FALSE}
+# fname <- mods %>% bic_mod() %>% save_tab()
+# suffix = "_unscl_cc_q1"
+# suffix = paste0("_unscl_cc_q1_",nfate,"fates")
+suffix = paste0("-",datName,"-q1-",uVar,fVar)
+# suffix = "_scl_cc_q1"
+aicTab <- unname(mods) %>% aic_mod()
+fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
+cat("creating AIC table; filename =",fname)
+
+knitr::include_graphics(paste0("analysis/",fname), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+# MuMIn::model.sel(mods)
+# modified_mods <- lapply(mods, MASS::glm.convert)
+# AICcmodavg::aictab(cand.set=modified_mods)
+```
+
+#### Create and save the regression table for the best model
+
+For the main effects model, I get a separation warning again D:
+
+```{r q1-regtab, echo=FALSE}
+# first, find the number of the best model
+# modnum = 13# manually enter number for top model
+# get all the model names:
+modNames <- as.list(modnames(mods)) # list of models in the order they were specified
+topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
+cat("top model:", topMod)
+secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
+cat("second best model:", secTopMod)
+cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
+modnum = which(modNames == topMod)
+modnum2 = which(modNames == secTopMod)
+cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula))
+regrTab <- tabRegr(modNum=modnum, 
+                   mods=mods, 
+                   resp=resp1,
+                   debug=T,
+                   suffix=paste0(datName,"q1_",uVar,fVar))
+knitr::include_graphics(paste0("analysis/",regrTab), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+#### Plot the top model:
+
+```{r q1-plot, eval=FALSE, include=FALSE}
+intPlot <- sjPlot::plot_model(
+  mods[[modnum]], 
+  type="int",
+  title="Predicted probabilities of marking nest fate \"unknown\" in the field",
+  axis.title=c("FINAL_OBS_INTERVAL","MARKED_UNKNOWN"),
+  legend.title="TRUE_FATE"
+  
+  ) + scale_color_manual(
+    values=c("H"="skyblue2", "D"="green3", "A"="red3", "F"="purple2"),
+    labels=c("H"="Hatched", "D"="Depredated", "A"="Abandoned", "F"="Failed (other)")
+  )
+intPlot
+# plogis(predict(fitted_model)) should convert the log-odds output of the model
+# to a probability; use predict(fitted_model, type="response") to see prob
+# of your data values.. can also calculate probs by hand if you want
+
+dataMod$probfull <- plogis(predict(mods[[1]]))
+dataMod$prob5 <- plogis(predict(mods[[5]]))  
+
+y = "probfull"
+x1 = "nest_age"
+x2 = "species"
+
+ggplot(dataMod, aes(x=.data[[x1]], y=.data[[y]])) +
+  geom_point(aes(color=.data[[x2]])) + 
+  geom_abline()
+```
+
+#### Odds ratios
+
+```{r q1-OR, eval=FALSE, include=FALSE}
+# knitr::include_graphics(filename2,
+#                         dpi=(1300/6)) # dpi setting = only thing that works
+oddrat <- mods |> 
+  discard(is.null) |>
+  odd_rat()
+oddrat
+```
+
+When we don't impute the NAs, it's a complete cases analysis (all NA
+rows removed automatically) BUT I need to be the one to remove the rows,
+or I'll be comparing models with different sample sizes
+
+
+### USING THE IMPUTED DATASETS:
+
+The imputed datasets are stored in one object of class "mids"
+
+The default for the mice package is to run all of the imputed datasets
+(20, in this case) through your model and pool the results
+
+-   Since I have many models, I looped through them and applied this
+    default approach first
+
+```{r q1-impute}
+impRes <- imppDat %>%
+  select(nest, nest_age, obs_int, cam_fate, fdate, species, HF_mis, misclass, is_u) %>%
+  # runImpMods(.,modList=modList,resp="is_u")
+  runImpMods(.,modList=modList,regMethod = "brglm2",resp=resp1)
+# summary(impRes)
+# impRes
+# lapply(impRes, summary)
+  fname <- paste0(datName,"impAIC_q1_",uVar,fVar)
+aicImp <- aicImpMods(impModPool = impRes,modList = modList,filePrefix = fname)
+# impTab <- impModTab(impModPool = impRes,modList = modList)
+# aicImp
+# knitr::include_graphics(paste0("analysis/",fname), 
+knitr::include_graphics(aicImp, 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+
+
+
+```{r q1-impute-2}
+# this works:
+impDat1 <- get(datNameImp)
+impDat  <- mice::mice(impDat1, seed=613, m=100, printFlag=FALSE)
+fit <- with(impDat, glm(as.formula(paste(resp, modList[[5]])), family=binomial, method=brglm2::brglmFit)) 
+# pass results to tbl_regression before pooling, and it will handle pooling + tidying:
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+varNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vnames = as.list(varNames)    
+names(vnames) <- vars
+# tabOR <- gtsummary::tbl_regression(pool.fit, label=vnames, exponentiate=TRUE)
+summ.fit <- gtsummary::tbl_regression(fit, label=vnames, exponentiate=TRUE)
+summ.fit
+fn <- sprintf("_q1_reg_imp_%s_%s.rtf", datNameImp, now)
+summ.fit %>%
+  gtsummary::as_gt() %>%
+  gt::gtsave( filename=fn, path="analysis/" )
+
+```
+
+
+##*
+------------------------------------------------------------------------
+
+## QUESTION 2: How do the predictor vars affect classification accuracy?
+
+Response: HF_mis were nests correctly marked hatched/failed, or not
+
+*NOTE* MAYBE should be recast as "was nest hatch misclassified?" so that unknowns that were actually hatched count as misclassified but unknowns that were actually failed don't?
+
+### Analysis (complete cases )
+
+#### Specify & run the analysis
+
+```{r q2, echo=TRUE}
+question <- "Was nest fate classified correctly in the field?"
+cat(question)
+dat <- get(datName)
+mods <- list()
+# cat("\n\nNumber of fate categories:", length(levels(ndGLM_2_cc$cam_fate)))
+cat("\n\nData used:", datName)
+cat("\n\nNumber of fate categories:", length(levels(dat$cam_fate)))
+# mods <- run_models(dataMod=datList[[i]], resp="is_u", modlist=modList)
+cat("\n\nRESPONSE VAR:",resp2,"\n\nMODELS:\n")
+# mods <- run_models(dataMod=dat, resp=resp, met="logistf", modlist=modList)
+# mods <- run_models(dataMod=dat, resp=resp, met="jeffreys", modlist=modList)
+# mods <- run_models(dataMod=dat, resp=resp2, met="glm.fit", modlist=modList)
+mods <- run_models(dataMod=dat, resp=resp2, met=met, modlist=modList)
+# mods <- run_models(dataMod=dat, resp=resp, met="brglm2", modlist=modList)
+# intPlot <- 
+sjPlot::set_theme(
+  base=theme_classic()
+  
+)
+sjPlot::plot_model(mods[[5]], type="int") +
+  labs(x="Nest age (days)", y="Predicted probability \nof misclassification", title="Interaction Plot for Species and Nest Age")
+
+# j+
+  # theme_classic()
+
+
+#+
+ # scale_fill_manual(values = species,
+  #                  labels=c("Common\nNighthawk",
+   #                          "Least\nTern"))
+# intPlot
+```
+
+
+```{r echo=TRUE}
+```
+
+#### Create and save the AIC table
+
+```{r q2-aic, echo=FALSE}
+# fname <- mods %>% bic_mod() %>% save_tab()
+# suffix = paste0("_unscl_cc_q2_", nfate, "_fates")
+# suffix = paste0("-",datName,"-q2-", nfate, "fates")
+suffix = paste0("-",datName,"-q2-", uVar,fVar)
+# suffix = "_scl_cc_q1"
+
+aicTab <- unname(mods) %>% aic_mod()
+fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
+cat("creating AIC table; filename =",fname)
+
+knitr::include_graphics(paste0("analysis/",fname),
+                        dpi=(1300/6)) # dpi setting = only thing that works
+
+```
+
+#### Create and save the regression table for the best model
+
+```{r q2-regtab, echo=TRUE}
+# first, find the number of the best model
+# modnum = 13# manually enter number for top model
+# get all the model names:
+modNames <- as.list(modnames(mods)) # list of models in the order they were specified
+# c <- confset(cand.set=mods, modnames=modNames, method='raw')
+# 
+# while(aWeight < 0.95){
+#   
+#
+topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
+cat("top model:", topMod)
+secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
+cat("second best model:", secTopMod)
+cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
+modnum = which(modNames == topMod)
+modnum2 = which(modNames == secTopMod)
+cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula) )
+
+regrTab <- tabRegr(modNum=modnum,
+                   mods=mods,
+                   resp=resp2,
+                   debug=T,
+                   # suffix =paste0("q2_",nfate,"fates"))
+                   suffix =paste0(datName,"q2_",uVar,fVar))
+knitr::include_graphics(paste0("analysis/",regrTab), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+# confSet <- length(which(cumsum(aicTab$`_data`$weight)<0.95))
+# confSet <- which(cumsum(aicTab$`_data`$weight)<0.95) # this doesn't get the last one unless it sums to exactly 0.95
+```
+
+
+```{r q2-regtab2, eval=FALSE, include=FALSE}
+newNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+vnames <- as.list(newNames)
+names(vnames) <- vars
+  
+                    
+tabOR <- gtsummary::tbl_regression(mods[[modnum]],
+                          label = vnames,
+                          # label= list(
+                          #   # resp~paste(r), # can't label response var
+                          #             species~"SPECIES",
+                          #             nest_age~"NEST_AGE",
+                          #             obs_int~"FINAL_INTERVAL",
+                          #             cam_fate~"TRUE_FATE",
+                          #             fdate~"END_DATE"),
+                          exponentiate=T)
+
+```
+
+### USING THE IMPUTED DATASETS:
+
+```{r q2-impute, echo=TRUE}
+# impDat <- ndGLM_imp   
+fam <- binomial
+# met <- "brglmFit"
+# resp <- "HF_mis"
+# resp <- "misclass"
+
+cat("imputation using this data:", datNameImp)
+
+impRes <- imppDat %>%
+  select(nest, nest_age, obs_int, cam_fate, fdate, species, HF_mis, misclass, is_u) %>%
+  runImpMods(.,modList=modList,regMethod = "brglm2",resp=resp2)
+  # runImpMods(.,modList=modList,regMethod = "glm.fit",resp=resp2)
+# impRes
+# lapply(impRes, summary)
+
+fname <- paste0(datName,"impAIC_q2_",uVar,fVar)
+# aicImp <- aicImpMods(impRes, fname)
+aicImp <- aicImpMods(impModPool = impRes,modList = modList,filePrefix = fname)
+# aicImp <- aicImpMods(impRes, "impAIC_q2_")
+# aicImp
+knitr::include_graphics(aicImp, 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+
+```{r q2-impute-2, echo=TRUE}
+# summary(pool(fit)) doesn't give the results the website claims it does, but only when you call model fit from a list?
+# this works:
+impDat1 <- get(datNameImp)
+impDat  <- mice::mice(impDat1, seed=613, m=100, printFlag=FALSE)
+fit <- with(impDat, glm(as.formula(paste(resp2, modList[[5]])), family=binomial, method=brglm2::brglmFit)) 
+# pass results to tbl_regression before pooling, and it will handle pooling + tidying:
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+varNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vnames = as.list(varNames)    
+names(vnames) <- vars
+# tabOR <- gtsummary::tbl_regression(pool.fit, label=vnames, exponentiate=TRUE)
+summ.fit <- gtsummary::tbl_regression(fit, label=vnames, exponentiate=TRUE)
+summ.fit
+fn <- sprintf("_q2_reg_imp_%s_%s.rtf", datNameImp, now)
+summ.fit %>%
+  gtsummary::as_gt() %>%
+  gt::gtsave( filename=fn, path="analysis/" )
+```
+
+
+```{r q2-impute-3, eval=FALSE, include=FALSE}
+# you can still also look at pooled results:
+pool.fit <- mice::pool(fit)
+summary(pool.fit)
+
+# these don't:
+mod_num <- 5
+fit <- mods[[5]]
+summary(fit)
+fit_imp <- impRes[[mod_num]]$pooled
+fit_imp
+summary(fit_imp)
+reg_sum <- summary(impRes[[5]]$pooled)
+reg_sum[,2]
+
+pool.OR <- exp(cbind(reg_sum[,1]))
+# impRes[[5]]$pooled %>%
+#   select(term, estimate, )
+
+```
+
+
+------------------------------------------------------------------------
+### end
+------------------------------------------------------------------------

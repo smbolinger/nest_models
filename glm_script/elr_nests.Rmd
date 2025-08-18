@@ -1,0 +1,65 @@
+---
+title: "Nest fate exact LR"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+#### Exact logistic regression
+
+For the model that won't converge using brglm2 (with either brglmFit or jeffrey's)
+Still haven't figured out the error from logistf
+
+Interaction term needs to be written out to match what is in "interest"
+
+Response variable is binomial, so must be expressed as # successes/# trials for each row of the dataset.
+
+Meant to be run as a child document within another script (like fate_GLM.Rmd)
+
+```{r eval=FALSE, include=FALSE}
+# exactDat <- ndGLM_unscl_cc %>%
+exactDat <- ndGLM_cc %>%
+  # mutate(across(c(is_u, HF_mis, species, cam_fate)), as.integer()) %>%
+  mutate(across(c(is_u, HF_mis, species, cam_fate), as.numeric)) %>%
+  group_by(species, cam_fate, nest_age, fdate, obs_int) %>%
+  mutate(n=n()) %>% 
+  ungroup() %>%
+  distinct()
+exactFit <- elrm::elrm(formula = is_u/n ~ species + cam_fate + species:cam_fate + nest_age + fdate + obs_int,
+     interest = ~species:cam_fate, 
+     iter = 50000,
+     dataset = exactDat)
+
+exactFit2 <- elrm::elrm(formula = HF_mis/n ~ species + cam_fate + species:cam_fate + nest_age + fdate + obs_int,
+     interest = ~species:cam_fate, 
+     iter = 50000,
+     dataset = exactDat)
+
+now = format(Sys.time(), "_%m%d_%H%M_")
+saveRDS(exactFit, file=paste0("exactFit1",now".rds"))
+saveRDS(exactFit2, file=paste0("exactFit2",now".rds"))
+```
+
+
+```{r eval=FALSE, include=FALSE}
+summary(exactFit)
+summary(exactFit2)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+# ex <- readRDS("exactFit1.rds")
+# ex2 <- readRDS("exactFit2.rds")
+# ex <- readRDS("exactFit1_old.rds")
+# ex2 <- readRDS("exactFit2_old.rds")
+suff1 <- "_09aug"
+suff2 <- "_"
+fn1 <- paste0("exactFit1",suff1,".rds")
+fn2 <- paste0("exactFit2",suff2,".rds")
+ex1 <- readRDS(fn1)
+ex2 <- readRDS(fn2)
+
+summary(ex)
+summary(ex2)
+```

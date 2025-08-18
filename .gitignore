@@ -47,3 +47,25 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# output
+rmark/out
+glm_script/analysis
+glm_script/figures
+py_output/
+
+# rmark files
+.inp
+.res
+.vcv
+.out
+
+# data
+nest_data/
+model_data/
+.csv
+
+# images
+.png
+.jpg
+

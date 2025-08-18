@@ -63,3 +63,6 @@ model_data/
 *.png
 *.jpg
 
+#other
+~$*
+

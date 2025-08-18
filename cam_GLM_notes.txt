@@ -1,0 +1,52 @@
+
+-------------------------------------------------------------------------------------------------------
+
+12 Sep 2023
+Check fate date for these nests: 
+
+ [1] 10072 10126 10210 10225 10234 10240 10241 10258 10288 10310 10311 10319 10323
+[14] 10334 10353 10357 10358 10360 10371 20200 20240 20249 20251 20256 20257 20258
+[27] 20259 20263 20264 20269 20276 20300 20301 20304 20317 20318 20321 20322 20400
+[40] 20402 20405 20406 20408 20415 20420 20424 20436 20460 30104 30124 30301 30309
+[53] 30909 30911 30921 30922 30926 30927 30933 30944 30949 30950 30951 30956 30958
+[66] 30961 30963
+
+Naming EQs in table:
+
+> dp <- function(x) deparse(x, width.cutoff=150)
+>   modEQ <- paste(sapply(modsC,  
++                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,)")
++                         ), sep = " ")
+> modEQ
+[1] "species + nest_age + cam_fate + fate_date + obs_int\")), family = binomial"
+[2] "1\")), family = binomial"                                                  
+[3] "species + nest_age\")), family = binomial"                                 
+[4] "species + nest_age + obs_int\")), family = binomial"                       
+[5] "species + nest_age + fate_date + obs_int\")), family = binomial"           
+>   modEQ <- paste(sapply(modsC,  
++                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\s)")
++                         ), sep = " ")
+> modEQ
+[1] "species + nest_age + cam_fate + fate_date + obs_int\")), family = binomial"
+[2] "1\")), family = binomial"                                                  
+[3] "species + nest_age\")), family = binomial"                                 
+[4] "species + nest_age + obs_int\")), family = binomial"                       
+[5] "species + nest_age + fate_date + obs_int\")), family = binomial"           
+>   modEQ <- paste(sapply(modsC,  
++                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sf)")
++                         ), sep = " ")
+> modEQ
+[1] "species + nest_age + cam_fate + fate_date + obs_int\"))"
+[2] "1\"))"                                                  
+[3] "species + nest_age\"))"                                 
+[4] "species + nest_age + obs_int\"))"                       
+[5] "species + nest_age + fate_date + obs_int\"))"           
+>   modEQ <- paste(sapply(modsC,  
++                         function(x) str_extract(dp(x$call), "(?<=~\\s).+(?=,\\sfamily)")
++                         ), sep = " ")
+> modEQ
+[1] "species + nest_age + cam_fate + fate_date + obs_int\"))"
+[2] "1\"))"                                                  
+[3] "species + nest_age\"))"                                 
+[4] "species + nest_age + obs_int\"))"                       
+[5] "species + nest_age + fate_date + obs_int\"))" 

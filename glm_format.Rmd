@@ -1,0 +1,130 @@
+---
+title: "GLMformat"
+author: "Sarah Bolinger"
+date: "2023-09-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Nest Fate Misclassification GLM
+
+Now, the data for the GLM. First, we will select only the cameras with
+nests, because the response variable is fate misclassification
+(difference between camera and field fate).
+
+We then reduce back to one row per nest by condensing the observation
+history to one cell,
+
+```{r}
+# filename <- "model_data/all_nest_data_GLM_0823_1555.csv"
+# ndGLM <- read_csv()
+
+nestData <- read_csv("nest_data_cleaned_0906_0949_.csv",
+                     col_types = cols(.default="c"))
+now = format(Sys.time(), "%m%d_%H%M_")
+```
+
+
+```{r}
+ndGLM <- nestData %>% 
+  filter(camera == TRUE) %>% 
+  group_by(nest, site, species) %>%   
+  select(nest, site, species, cov_5m, fate_date, nest_age, obs_int, i, j, k, final_fate, cam_fate, status, year )%>%
+  summarize(status = list(status), 
+            across(where(is.integer), last),
+            across(where(is.numeric), last),
+            across(where(is.character), first)
+  ) %>%
+  mutate_if(is.list, ~paste(unlist(.), collapse = '|'))
+
+table(ndGLM$species)
+table(ndGLM$site)
+table(ndGLM$year)
+ 
+```
+
+```{r}
+howMis <- function(fate, cfate){
+  case_when(
+    #fate == 0                  & cfate %in% c(2,3,4,5,6)     ~ "F", 
+    #fate == 0            & cfate == 1           ~ "M", # fail-unkn -> hatch
+    #fate == 0            & cfate %in% c(1:6)    ~ "M", # fail-unkn -> other
+    #fate == 7            & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    
+    fate %in% c(0:6)  & cfate != fate        ~ "M", # fate    -> other 
+    fate %in% c(7,8)  & cfate %in% c(0:6)    ~ "N", # unknown -> other
+    fate %in% c(0:6)  & cfate == 7           ~ "U"  # unknown cam fate
+  )
+}
+```
+
+```{r}
+ndGLM <- ndGLM %>% 
+  mutate(hatchfail = case_when(
+    final_fate %in% c(0, 2:6) ~ 0, # fail
+    final_fate == 1           ~ 1, # hatch
+    final_fate == 7           ~ 7,
+    final_fate == 8           ~ 7,
+    final_fate == NA          ~ 7 # MAKE SURE all of these are coding correctly
+  ),
+  c_hatchfail = case_when(
+    cam_fate %in% c(0, 2:6) ~ 0,
+    cam_fate == 1           ~ 1,
+    cam_fate == 7           ~ 7,  # hopefully not many/any of either of these
+    #cam_fate == NA          ~ 7   # this one doesn't work - oh duh
+    is.na(cam_fate)         ~ 7
+    # remove cam_fate == 7?
+  )) %>%
+  mutate(HF_mis = case_when(
+    c_hatchfail == 7 | hatchfail == 7 ~NA,
+    c_hatchfail == hatchfail ~ 0, # nest wasn't misclassified
+    c_hatchfail != hatchfail ~ 1  # nest was misclassified
+  )) %>%
+  mutate(HF_mis = ifelse(c_hatchfail == 7, NA, HF_mis),
+         HF     = case_when(
+           hatchfail == 0 & c_hatchfail == 1 ~ 101,
+           hatchfail == 1 & c_hatchfail == 0 ~ 110
+         )) # camera H/F unknown
+  
+  
+```
+
+Failure misclassification
+so are we talking about nests that *actually failed*? (probably)
+not nests that were marked as failed in the field
+
+or has to be both? because reclassifying from 0 to 1 OR 1 to 0 is covered in the first
+analysis.
+
+first need to verify that nest cam fate == some type of failure
+(AND field fate == fail, too?)
+then, was nest misclassified or not
+
+```{r}
+# ndGLM_f <- ndGLM[ndGLM$cam_fate != 1,]
+# 
+
+fail_mis <- function(fate, cfate){
+  
+  
+  
+}
+
+ndGLM <- ndGLM |> mutate(
+  
+  f_class = case_when(
+    
+    c_hatchfail == 1 ~ NA,
+    c_hatchfail == 0
+    
+  )
+  
+)
+
+```
+
+```{r}
+ndGLM <- ndGLM %>% 

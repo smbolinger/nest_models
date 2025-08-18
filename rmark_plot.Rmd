@@ -1,0 +1,124 @@
+---
+title: "RMark-ch1"
+author: "Sarah Bolinger"
+date: "2023-09-07"
+output: html_document
+---
+```{r}
+remove(list=ls())
+assign('last.warning', NULL, envir=baseenv())
+
+library(RMark)
+```
+
+
+```{r}
+#filename = 'MARKdataRUTH2019-withcam.csv'         # run analysis including cam nests
+#filename = 'MARKdataRUTH2019-nocam.csv'          # run analysis excluding cam nests
+
+filename  = "model_data/MARK_data_cam_830_1001.csv"
+filename2  = "model_data/MARK_data_field_830_1001.csv"
+
+dataNestC = read.csv(filename)
+dataNestF = read.csv(filename2)
+# nocc     = dataNest$nocc
+```
+
+can look at DSR AIC in a similar model 
+
+```{r}
+null_dataC <- dataNestC %>%
+  mutate(Name        = sprintf("/*RUTH_%s*/", nest),
+         FirstFound  = i,
+         LastPresent = j,
+         LastChecked = k,
+         Fate        = fate,
+         Freq        = 1) %>%
+  select(Name, FirstFound, LastPresent, LastChecked, Fate, Freq)
+
+null_dataF <- dataNestF %>%
+  mutate(Name        = sprintf("/*RUTH_%s*/", nest),
+         FirstFound  = i,
+         LastPresent = j,
+         LastChecked = k,
+         Fate        = fate,
+         Freq        = 1) %>%
+  select(Name, FirstFound, LastPresent, LastChecked, Fate, Freq)
+
+
+# how to find nocc? max(season_day)?
+#dat = null_data
+#
+## lots of other options / arguments to try out!
+```
+
+
+```{r}
+run_rmark_models = function(dat)
+{
+    Dot = mark( dat, nocc = 115 , model='Nest', se=TRUE, prefix="rmark/RUTH",
+                model.parameters=list(S=list(formula=~1)) )
+
+    return(collect.models())
+}
+```
+
+
+```{r}
+resultsNestC = run_rmark_models(null_dataC)
+
+resultsNestF = run_rmark_models(null_dataF)
+
+resultsNestC$results
+```
+
+```{r}
+
+d.C = resultsNestC$Dot$results$real[, 1:4] 
+
+d.F = resultsNestF$Dot$results$real[,1:4]
+# s.dot = cbind(s.d[rep(seq_len(nrow(s.d)), each = 8), ],
+              # Week = 1:8, 
+              # Model = "constant")
+# 
+# s.t = cbind(resultsNestC$S.time$results$real[, 1:4],
+#             Week = 1:8, 
+#             Model = "time-varying")
+# 
+# s.T = cbind(bduck.results$S.TIME$results$real[, 1:4],
+#             Week = 1:8, 
+#             Model = "Time trend")
+# 
+# s.temp = cbind(bduck.results$S.temp$results$real[, 1:4],
+#                Week = 1:8,
+#                Model = "temperature")
+
+# store all the estimates in a data frame
+# surv.ests = rbind(s.dot, s.t, s.T, s.temp)
+surv.ests = rbind(d.C, d.F)
+model <- c("cam", "field")
+surv.ests = cbind(model, surv.ests)
+
+ggplot(surv.ests, aes(x=model, y=estimate)) + 
+  # geom_boxplot()
+  geom_point() +
+  geom_errorbar(aes(ymin=lcl, ymax=ucl))
+
+# Make plot
+# The errorbars overlapped, so use position_dodge to move them horizontally
+# pd <- position_dodge(0.4) 
+# 
+# ggplot(surv.ests, aes(x = Week, y = estimate, color = Model)) +
+#   geom_errorbar(aes(ymin = lcl, ymax = ucl), 
+#                 width = 0.1, 
+#                 position = pd) + 
+#   geom_line(position = pd) +
+#   geom_point(position = pd) +
+#   scale_y_continuous("Weekly Survival Estimates", 
+#                      limits = c(0, 1), 
+#                      breaks = seq(0, 1, by = 0.1)) + 
+#   theme_bw() + # black and white theme
+#   theme(legend.justification = c(1, 0.1),
+#           legend.position = c(0.9, 0.1)) # Position legend in lower left
+```
+

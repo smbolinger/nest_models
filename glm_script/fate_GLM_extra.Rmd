@@ -1,0 +1,97 @@
+---
+title: "other_plots_tables"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### add field fate function
+```{r include=FALSE}
+ff <- function(nData){
+    cat("*** adding field fate category ***\n")
+  cat("old final_fate category:\n")
+  table(nData$final_fate)
+  nData <- nData %>%
+    mutate(field_fate = final_fate) %>%
+    mutate(final_fate = coalesce(cam_fate, field_fate )) 
+  cat("new final_fate category:\n")
+  table(nData$final_fate)
+  cat("new field_fate category:\n")
+  table(nData$field_fate)
+  
+  nData$fdate <- nData$k
+}
+```
+
+Estimate bias for hatch date:
+
+```{r eval=FALSE, include=FALSE}
+est_hatch <- ndGLM_$estHD[ndGLM_$cam_fate=="H"]
+names(est_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+
+true_hatch <- ndGLM_$k_adj[ndGLM_$cam_fate=="H"]
+names(true_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+plot(x=est_hatch, y=true_hatch)
+# mtr <- caret::confusionMatrix(est_hatch, true_hatch)
+# as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+# 
+# est_hatch <- ndGLM_ %>%
+#   filter(!is.na())
+```
+
+### More tables:
+
+```{r eval=FALSE, include=FALSE}
+# fail <- c("S","F","Hu","D","A")
+fail <- c(0,2:6)
+corr_fate <- ndGLM_ %>% 
+  # filter(HF_mis==1) %>%
+  filter(misclass==1) %>%
+  mutate(
+    correction = case_when(
+      fate == 7 & cfate %in% fail ~ "U to F",
+      fate == 7 & cfate == 1 ~ "U to H",
+      fate == 1 & cfate %in% fail ~ "H to F",
+      fate %in% fail & cfate == 1 ~ "F to H",
+      fate %in% fail & fate != cfate ~ "cause of fail"
+    )) %>% select(nest, species, field_fate, cam_fate, correction)
+
+cat("nests marked unknown that actually failed:\n", 
+    corr_fate$nest[corr_fate$correction=="U to F"])
+cat("\n\nnests marked unknown that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="U to H"])
+cat("\n\nnests marked failed that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="F to H"])
+cat("\n\nnests marked hatched that actually failed:\n",
+    corr_fate$nest[corr_fate$correction=="H to F"])
+    # correction = case_when(
+    #   field_fate == "U" & cam_fate == "H" ~ "U to H",
+    #   field_fate == "U" & cam_fate %in% fail  ~ "U to F",
+    #   field_fate %in% fail & cam_fate == "H" ~ "F to H",
+    #   field_fate == "H" & cam_fate %in% fail ~ "H to F"
+    # )
+  # )
+  
+```
+
+### a. Look at/edit individual nests or groups of nests (OPTIONAL)
+
+```{r examine-full-data, eval=FALSE, include=FALSE}
+nestNum <- 30959
+as.vector(ndGLM1[ndGLM1$nest==nestNum,])
+
+ndGLM1$nest_age[ndGLM1$nest==30959] = 20
+
+ndGLM1$fate_date[ndGLM1$nest %in% justFDate]
+# ndGLM1[2,]
+```
+
+### f. Compare dataframes  *optional* :
+
+```{r, child=if(compare) 'compare.Rmd'}
+
+```

@@ -7,6 +7,29 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+### a. Specify the data and variables to use
+
+```{r names-1, eval=FALSE, include=FALSE}
+# This is mostly for naming files in an informative way.
+
+datName = "ndGLM1"
+# datName = "ndGLM_"
+dat = get(datName)
+
+prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
+if(UHisH == TRUE & UFisF == TRUE){
+  uVar <- "UHFisHF" 
+}else{
+  uVar <- ""
+}
+
+fname <- paste("nest_data/",datName, uVar, now, ".csv", sep="_")
+write.csv(ndGLM1, fname)
+# number of fate categories:
+# fVar <- paste0("-",nfate,"fates")
 ```
 
 ### Create frequency tables (optional)
@@ -18,69 +41,141 @@ knitr::opts_chunk$set(echo = TRUE)
 # frTabInitial3 <- fr_tab(dat, vars="misclass")
 # knitr::include_graphics(paste0("analysis/",frTabInitial), 
                         # dpi=(1300/6)) # dpi setting = only thing that works
-suff <- paste0("_",datName,"_",uVar, fVar)
-# tabbbb <- fr_tab(ndGLM_cc, vars="HF_mis",suffix = suff)
-tabbbb <- fr_tab(dat, vars="HF_mis",suffix = suff)
-# why does the complete cases dataframe have missing values for HF_mis?
-knitr::include_graphics(paste0("analysis/",tabbbb), 
-                        dpi=(1300/6)) # dpi setting = only thing that works
+if(tab1 == TRUE | tab2 == TRUE){
+  suff <- paste0("_",datName,"_",uVar, fVar)
+  # tabbbb <- fr_tab(ndGLM_cc, vars="HF_mis",suffix = suff)
+  tabbbb <- fr_tab(dat, vars="HF_mis",suffix = suff)
+  # why does the complete cases dataframe have missing values for HF_mis?
+  knitr::include_graphics(paste0("analysis/",tabbbb), 
+                          dpi=(1300/6)) # dpi setting = only thing that works
+} else {
+  cat("\t\t>> skip")
+}
 ```
 
 ### Create histograms and correlation plots (optional)
 
 ```{r plot-parameters, eval=FALSE, include=FALSE}
-cat("max values:\n")
-sapply(predictors, function(x) max(dat[[x]], na.rm=TRUE))
-cat("\nand suggested bin width:\n") # freedman diaconis rule for bin width
-sapply(predictors, function(x) 2*((IQR(dat[[x]], na.rm=T)) / (length(dat[[x]])^(1/3))) )
 
+if(corrplots1 | hist1 | corrplots2 | hist2){
+  cat("max values:\n")
+  sapply(predictors, function(x) max(dat[[x]], na.rm=TRUE))
+  cat("\nand suggested bin width:\n") # freedman diaconis rule for bin width
+  sapply(predictors, function(x) 2*((IQR(dat[[x]], na.rm=T)) / (length(dat[[x]])^(1/3))) )
+} else {
+  cat("\t\t>> skip")
+}
 ```
 
 
 ```{r is_u-hist-1, eval=FALSE, include=FALSE}
-
-catPlotU <- plot_predictors(resp="is_u",
-                     dat=dat,
-                     # vars = c("nest_age", "obs_int", "fdate"),
-                     vars      = predictors,
-                     filTit    = "Nest Fate",
-                     filLabs   = c("Classifiable\nin Field", 
-                                   "Not Classifiable\nin Field"), 
-                     filColors = c("#88CCEE", "#AA4499"),
-                     # filColors = c("green", "#AA4499"),
-                     xLabs     = prLabs,
-                     yLab      = "Count",
-                     # xMaxVect = c(32, 10, 120),
-                     xMaxVect = c(32, 11, 120),
-                     binWidthVect = c(3, 1, 12),
-                     suffix=paste0(datName, uVar)
-                     )#,
-
+if(hist1 | hist2){
+  catPlotU <- plot_predictors(resp="is_u",
+                       dat=dat,
+                       # vars = c("nest_age", "obs_int", "fdate"),
+                       vars      = predictors,
+                       filTit    = "Nest Fate",
+                       filLabs   = c("Classifiable\nin Field", 
+                                     "Not Classifiable\nin Field"), 
+                       filColors = c("#88CCEE", "#AA4499"),
+                       # filColors = c("green", "#AA4499"),
+                       xLabs     = prLabs,
+                       yLab      = "Count",
+                       # xMaxVect = c(32, 10, 120),
+                       xMaxVect = c(32, 11, 120),
+                       binWidthVect = c(3, 1, 12),
+                       suffix=paste0(datName, uVar)
+                       )#,
+} else {
+  cat("\t\t>> skip")
+}
 ```
 
 
 ```{r HF_mis-plot-1, eval=FALSE, include=FALSE}
 # badNest <- ndGLM1$nest[ndGLM1$obs_int>12]
-
-catPlotM <- plot_predictors(resp="HF_mis",
-                     dat=dat,
-                     vars = predictors,
-                     filTit    = "Nest Fate",
-                     filLabs   = c("Correctly\nClassified", "Incorrectly\nClassified"),
-                     # filLabs   = c("Classifiable\nin Field", 
-                                   # "Not Classifiable\nin Field"), 
-                     filColors = c("#44AA99", "#EE7733"),
-                     xLabs     = prLabs,
-                     yLab      = "Count",
-                     # xMaxVect = c(32, 10, 120),
-                     xMaxVect = c(32, 11, 120),
-                     # xMaxVect = c(32, 8, 120),
-                     binWidthVect = c(3, 1, 12),
-                     suffix=paste0(datName, uVar)
-                     )#,
-
+if(hist1 | hist2){
+  catPlotM <- plot_predictors(resp="HF_mis",
+                       dat=dat,
+                       vars = predictors,
+                       filTit    = "Nest Fate",
+                       filLabs   = c("Correctly\nClassified",
+                                     "Incorrectly\nClassified"
+                                     ),
+                       # filLabs   = c("Classifiable\nin Field", 
+                                     # "Not Classifiable\nin Field"), 
+                       filColors = c("#44AA99", "#EE7733"),
+                       xLabs     = prLabs,
+                       yLab      = "Count",
+                       # xMaxVect = c(32, 10, 120),
+                       xMaxVect = c(32, 11, 120),
+                       # xMaxVect = c(32, 8, 120),
+                       binWidthVect = c(3, 1, 12),
+                       suffix=paste0(datName, uVar)
+                       )#,
+} else {
+  cat("\t\t>> skip")
+}
 
 ```
 
 
 
+
+### d. Create more scatterplots:
+```{r scatterplot}
+# names(pairList)
+# pairList <- combn(predictors, m=2, simplify=F)
+# spc <- 
+if(corrplot1 | corrplot2){
+  pairList <- combn(prList, m=2, simplify=F)
+  plList <- lapply(pairList, function(x){
+    # ggplot(data=dat, aes(x=get(x[1]), y=get(x[2])) ) +
+    ggplot(data=dat, aes(x=get(x[[1]]), y=get(x[[2]])) ) +
+      geom_point() +
+      geom_smooth(method=lm) +
+      # ggpmisc::stat_poly_eq() +
+      xlab(names(x)[1]) +
+      ylab(names(x)[2]) +
+      # ggtitle("Correlation Plots - NA removed")+
+      # ggpubr::stat_cor( geom="label", label.x.npc = "middle", label.y.npc = "top") #+
+      ggpubr::stat_cor( geom="label", label.y.npc = "top", size=6, face="bold") +
+      theme_classic() +
+      theme(axis.text = element_text(size=14),
+          axis.title = element_text(size=16), # can't do margins for x and y axis titles at once
+          axis.title.y = element_text(margin=margin(r=5)),
+          axis.title.x = element_text(margin=margin(t=5))) +
+          # plot.margin=margin(c(0.3,1,0.3,0.1), "cm")
+      # theme( plot.margin=unit(c(1,0.5,1,0.5), "cm") ) # margins for 3-column arrangment
+      theme( plot.margin=unit(c(0.5,1,0.5,1), "cm") ) # margins for 3-row arrangement
+      # theme(panel.background = element_rect(fill="lightgray", alpha=0.5))
+    })
+  # dsgn <- "AB
+  #          C#"
+  # pl <- patchwork::wrap_plots(plList)
+  pl <- patchwork::wrap_plots(plList,
+                              ncol=2,
+                              nrow=2)
+                              # design=dsgn)
+  # add plot margin after assembly?
+  # pl <- pl + theme( plot.margin=margin(c(1,1,1,0), "cm"))
+  # ggsave(filename=paste0("corrPlot", now, ".svg"))
+  pl
+  
+  now = format(Sys.time(), "_%m%d_%H%M_")
+  
+  fname <- paste0(homeDir, "glm_script/figures/corr_plot_cc_", now, ".svg")
+  # ggsave(fname, plot=pl, width=9, height=3)
+  ggsave(fname, plot=pl, width=10, height=10)
+} else {
+  cat("\t\t>> skip")
+}
+```
+
+```{r correlation-plots-2, eval=FALSE, include=FALSE}
+library("PerformanceAnalytics")
+cormat <- dat |> 
+  select(nest_age, obs_int, fdate) |>
+  data.matrix() |>
+  chart.Correlation(histogram=T)
+```

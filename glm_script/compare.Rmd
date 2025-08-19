@@ -5,6 +5,12 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
+The old one didn't have the same columns; need to add some...
+
+- add field_fate and change final_fate
+
+Maybe better comparison after removing the unknown fate nests
+
 
 Maybe go back and check the nest ages that I added and see if any are spurious
 

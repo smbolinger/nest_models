@@ -1,3 +1,16 @@
+
+TO DO:
+
+Figure out field evidence issue for 2020 "hatch" nests
+
+Find more papers and see which type of misclassification they use
+
+abandoned nests - what counts as final observation? is it once we realized it was abandoned? first obs after estimated hatch date (clear it didn't hatch when expected)? that only applies to non-viable eggs...
+
+fail is like unknown-fail because we could not have any idea what happened but if the nest has been floated, we say fail if it's too far before the est hatch date.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 intro notes:
 
 Corrected final obs interval for nests that were not checked/not found on penultimate obs
@@ -102,11 +115,27 @@ chick(s) seen in field: 20400, 20460?
 other hatch signs in field: 20266 (behavior)
 marked U originally: 10206,10235,20260, 30421,30932,30938,10950, 30917
 
+Run models:
 
-TO DO:
 
-Figure out field evidence issue for 2020 "hatch" nests
+Think about which interactions make sense in answering this question
 
-Find more papers and see which type of misclassification they use
+-   Response: is_u
 
-abandoned nests - what counts as final observation? is it once we realized it was abandoned? first obs after estimated hatch date (clear it didn't hatch when expected)? that only applies to non-viable eggs...
+Interaction models
+
+-   What interactions make biological sense?
+
+species \* age \| species \* obsint \| species \* fate age \* obsint \|
+age \* fate \| obsint \* date \| obsint \* fate
+
+Can I actually predict the magnitude/direction of the interaction for
+them?
+
+*Even if the model numbers are not sequential, will still work (see code
+later on)*
+
+brglmFit does the Firth penalization by default Firth's logistic
+regression is best for explanatory; adds bias to predictions
+
+

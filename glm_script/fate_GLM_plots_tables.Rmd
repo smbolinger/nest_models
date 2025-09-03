@@ -5,29 +5,25 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
-```
-
 ### a. Specify the data and variables to use
 
-```{r names-1, eval=FALSE, include=FALSE}
+```{r plot--names-1, echo=TRUE}
 # This is mostly for naming files in an informative way.
 
-datName = "ndGLM1"
+# datName = "ndGLM1" # specified in main doc; changes depending on where you are in script
 # datName = "ndGLM_"
+# prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
 dat = get(datName)
+# print("data used for plotting/tables:", datName) # print expects digits?
+cat("data used for plotting/tables:", datName)
 
-prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
-if(UHisH == TRUE & UFisF == TRUE){
-  uVar <- "UHFisHF" 
-}else{
-  uVar <- ""
-}
+fVar <- "_allFates"
+uVar <- "_UHisU"
+if(UHisH) uVar <- "_UHisH" 
+if(exists("nfate")) fVar <- paste0("_",nfate,"fates") # exists seems to be more complicated than I thought...
 
-fname <- paste("nest_data/",datName, uVar, now, ".csv", sep="_")
-write.csv(ndGLM1, fname)
+# fname <- paste("nest_data/",datName, uVar, now, ".csv", sep="_")
+# write.csv(ndGLM1, fname)
 # number of fate categories:
 # fVar <- paste0("-",nfate,"fates")
 ```
@@ -35,14 +31,14 @@ write.csv(ndGLM1, fname)
 ### Create frequency tables (optional)
 
 
-```{r echo=TRUE}
+```{r freqtabcreate, echo=TRUE}
 # frTabInitial <- fr_tab(dat, vars="all")
 # frTabInitial2 <- fr_tab(dat, vars="HF_mis")
 # frTabInitial3 <- fr_tab(dat, vars="misclass")
 # knitr::include_graphics(paste0("analysis/",frTabInitial), 
                         # dpi=(1300/6)) # dpi setting = only thing that works
 if(tab1 == TRUE | tab2 == TRUE){
-  suff <- paste0("_",datName,"_",uVar, fVar)
+  suff <- paste0("_",datName,uVar, fVar)
   # tabbbb <- fr_tab(ndGLM_cc, vars="HF_mis",suffix = suff)
   tabbbb <- fr_tab(dat, vars="HF_mis",suffix = suff)
   # why does the complete cases dataframe have missing values for HF_mis?
@@ -86,6 +82,8 @@ if(hist1 | hist2){
                        binWidthVect = c(3, 1, 12),
                        suffix=paste0(datName, uVar)
                        )#,
+  knitr::include_graphics(paste0(homeDir,catPlotU), 
+                          dpi=(1300/6)) # dpi setting = only thing that works
 } else {
   cat("\t\t>> skip")
 }
@@ -113,6 +111,8 @@ if(hist1 | hist2){
                        binWidthVect = c(3, 1, 12),
                        suffix=paste0(datName, uVar)
                        )#,
+  knitr::include_graphics(paste0(homDir,catPlotM), 
+                          dpi=(1300/6)) # dpi setting = only thing that works
 } else {
   cat("\t\t>> skip")
 }
@@ -122,13 +122,12 @@ if(hist1 | hist2){
 
 
 
-### d. Create more scatterplots:
 ```{r scatterplot}
 # names(pairList)
 # pairList <- combn(predictors, m=2, simplify=F)
 # spc <- 
-if(corrplot1 | corrplot2){
-  pairList <- combn(prList, m=2, simplify=F)
+if(corrplots1 | corrplots2){
+  pairList <- combn(prList, m=2, simplify=FALSE)
   plList <- lapply(pairList, function(x){
     # ggplot(data=dat, aes(x=get(x[1]), y=get(x[2])) ) +
     ggplot(data=dat, aes(x=get(x[[1]]), y=get(x[[2]])) ) +
@@ -139,10 +138,10 @@ if(corrplot1 | corrplot2){
       ylab(names(x)[2]) +
       # ggtitle("Correlation Plots - NA removed")+
       # ggpubr::stat_cor( geom="label", label.x.npc = "middle", label.y.npc = "top") #+
-      ggpubr::stat_cor( geom="label", label.y.npc = "top", size=6, face="bold") +
+      ggpubr::stat_cor( geom="label", label.y.npc = "top", size=8, face="bold") +
       theme_classic() +
-      theme(axis.text = element_text(size=14),
-          axis.title = element_text(size=16), # can't do margins for x and y axis titles at once
+      theme(axis.text = element_text(size=18),
+          axis.title = element_text(size=20), # can't do margins for x and y axis titles at once
           axis.title.y = element_text(margin=margin(r=5)),
           axis.title.x = element_text(margin=margin(t=5))) +
           # plot.margin=margin(c(0.3,1,0.3,0.1), "cm")
@@ -167,6 +166,8 @@ if(corrplot1 | corrplot2){
   fname <- paste0(homeDir, "glm_script/figures/corr_plot_cc_", now, ".svg")
   # ggsave(fname, plot=pl, width=9, height=3)
   ggsave(fname, plot=pl, width=10, height=10)
+  knitr::include_graphics(fname, 
+                          dpi=(1300/6)) # dpi setting = only thing that works
 } else {
   cat("\t\t>> skip")
 }

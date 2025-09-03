@@ -82,7 +82,7 @@ now = format(Sys.time(), "_%m%d_%H%M_")
 
 # filename <- paste0(homeDir,"glm_script/import_data_", now, ".csv")
 # cat("import file name:", filename)
-cat(">> homeDir =", homeDir, "     >> now =", now,"\n\n>> predictor variables:\n\n")
+cat(">> homeDir =", homeDir, "     >> now =", now,"\n\n>> numeric predictor variables:\n\n")
 # print(prList)
 cat(paste(names(prList), prList, sep=": ", collapse="    "))
 
@@ -178,8 +178,8 @@ filter_dat1 <- function(nestData, sites=c("RUTE","RUTW"), spp=c("LETE","CONI"),
 ```{r other-settings, echo=FALSE}
 debug        = FALSE
 
-missing_diag = FALSE
-# missing_diag = TRUE
+# missing_diag = FALSE
+missing_diag = TRUE
 separation   = FALSE
 
 corrplots1   = FALSE
@@ -226,7 +226,6 @@ To run python code need reticulate package.
 ```{r load-data, echo=FALSE}
 
   filename <- paste0(homeDir,read_file(paste0(homeDir, "cleaned_data/import_name.txt")))
-
 # if(debug) cat("importing from:",filename,"\n\n")
 cat("importing from:",filename,"\n\n")
 # nData <- read_csv(filename)[-1]
@@ -234,14 +233,14 @@ nData <- read_csv(filename)
 
 ```
 
-
+### c. Filter the data:
 
 ```{r filter-data}
 nData$fdate      <- nData$final_obs_date2
 nData$final_fate <- nData$final_fate2
-nData$field_fate <- nData$field_fate9
-nData$obs_int    <- nData$final_obs_int2
-nData$nest_age   <- nData$nest_age1 # nest age based on actual obs date
+nData$field_fate <- nData$field_fate10
+nData$obs_int    <- nData$final_obs_int3
+nData$nest_age   <- nData$nest_age3 # nest age based on actual obs date and actual hatch date
 nData$cam_fate   <- nData$cam_fate2
 
 nd <- nData %>%
@@ -249,6 +248,9 @@ nd <- nData %>%
   filter( nest!=20259) %>% # NA for final_obs_int (not tracked to fate)
   filter_dat1(cam_vect=cam_str, debug=debug,  # filters for cam by default
               grouped=grouped, spp=spp_sel, sites=sites_sel)
+              # grouped=FALSE, spp=spp_sel, sites=sites_sel)
+
+
 
 ```
 
@@ -282,7 +284,7 @@ if(UFisF) nd$fate[nd$fate==9] = 0 else nd$fate[nd$fate==9] = 7
 nd %>% filter(nest %in% UHFnests) %>% select(nest, field_fate, cam_fate, fate, cfate)
 ```
 
-### d.  Add the response vars:
+### d. Add the response vars:
 
 ```{r add-response, echo=TRUE}
 ndGLM1 <- as.data.frame(add_vars(nd, debug=T))
@@ -303,6 +305,8 @@ print_vars(ndGLM1)
 
 ## 2. DIAGNOSTICS  
 
+### a. Plots/frequency tables
+
 ```{r}
 datName <- "ndGLM1"
 prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
@@ -311,6 +315,12 @@ if(sum(plsettings1 == 0)) cat(">> skip")
 
 
 ```{r plots_tables1, child=if(tab1 | hist1 | corrplots1) 'fate_GLM_diagnostics.Rmd'}
+```
+
+### b. Evaluate missing data, presence of separation
+
+```{r}
+if(missing_diag == FALSE & separation == FALSE) cat(">> skip")
 ```
 
 
@@ -462,7 +472,6 @@ modList <- c(
   # "~ nest_age "
   
 )
-
 # glmFit <- glm(formula="isu ~ species * nest_age + fdate + obs_int + cam_fate", 
 #               family = binomial(), 
 #               data = ndGLM_unscl_cc)
@@ -483,10 +492,10 @@ datNameImp   <- "ndGLM_scl"
 # met     <- "jeffreys"
 met     <- "brglm2"
 impMet  <- met
-fVar <- "allFates"
-uVar <- "_UHisU_"
-if(UHisH) uVar <- "_UHisH_" 
-if(exists("nfate")) fVar <- paste0("-",nfate,"fates") # exists seems to be more complicated than I thought...
+fVar <- "_allFates"
+uVar <- "_UHisU"
+if(UHisH) uVar <- "_UHisH" 
+if(exists("nfate")) fVar <- paste0("_",nfate,"fates") # exists seems to be more complicated than I thought...
 ```
 
 
@@ -507,16 +516,20 @@ AKA is there field evidence or not
 
 ```{r q1}
 question <- "Was nest fate classifiable in the field?"
-
+quest   <- "_q1"
 # dat <- parse(datName) # this one appears to be for files
 dat <- get(datName)
 mods <- list()
 resp   <- "is_u"
+modList2 <- paste(resp, modList, sep=" ")
+modList3 <- lapply(modList2, function(x) as.formula(x)) # what is benefit of formula type?
 
 cat(question)
 cat("\n\nData used:", datName)
 cat("\n\nNumber of fate categories:", length(levels(dat$cam_fate)))
-cat("\n\nRESPONSE VAR:",resp)
+cat("\n\nRESPONSE VAR:",resp, "\n\n")
+cat("\n\nModels to fit:\n",paste(modList2, collapse="\n" ))
+
 # mods <- run_models(dataMod=dat, resp="is_u", modlist=modList)
 # cat("\n\nclassifiable / not classifiable in field")
 # table(ndGLM_unscl_cc$is_u)
@@ -528,95 +541,10 @@ mods <- run_models(dataMod=dat, resp=resp, met=met, modlist=modList)
 # write.csv(ndGLM_cc, "nestdata2_.csv")
 # sjPlot::plot_model(mods[[5]], type="int")
 ```
+### CREATE AIC TABLES AND REGRESSION TABLES:
 
-#### Create and save the AIC table
-
-```{r q1-aic, echo=FALSE}
-# fname <- mods %>% bic_mod() %>% save_tab()
-# suffix = "_unscl_cc_q1"
-# suffix = paste0("_unscl_cc_q1_",nfate,"fates")
-suffix = paste0("-",datName,"-q1-",uVar,fVar)
-# suffix = "_scl_cc_q1"
-aicTab <- unname(mods) %>% aic_mod()
-fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
-cat("creating AIC table; filename =",fname)
-
-knitr::include_graphics(paste0("analysis/",fname), 
-                        dpi=(1300/6)) # dpi setting = only thing that works
-# MuMIn::model.sel(mods)
-# modified_mods <- lapply(mods, MASS::glm.convert)
-# AICcmodavg::aictab(cand.set=modified_mods)
+```{r q1_aic, child="fate_GLM_AICc.Rmd"}
 ```
-
-#### Create and save the regression table for the best model
-
-```{r q1-regtab, echo=FALSE}
-# first, find the number of the best model
-# modnum = 13# manually enter number for top model
-# get all the model names:
-modNames <- as.list(modnames(mods)) # list of models in the order they were specified
-topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
-cat("top model:", topMod)
-secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
-cat("second best model:", secTopMod)
-cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
-modnum = which(modNames == topMod)
-modnum2 = which(modNames == secTopMod)
-cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula))
-regrTab <- tabRegr(modNum=modnum, 
-                   mods=mods, 
-                   resp=resp,
-                   debug=T,
-                   suffix=paste0(datName,"q1_",uVar,fVar))
-knitr::include_graphics(paste0("analysis/",regrTab), 
-                        dpi=(1300/6)) # dpi setting = only thing that works
-```
-
-#### Plot the top model:
-
-```{r q1-plot, eval=FALSE, include=FALSE}
-intPlot <- sjPlot::plot_model(
-  mods[[modnum]], 
-  type="int",
-  title="Predicted probabilities of marking nest fate \"unknown\" in the field",
-  axis.title=c("FINAL_OBS_INTERVAL","MARKED_UNKNOWN"),
-  legend.title="TRUE_FATE"
-  
-  ) + scale_color_manual(
-    values=c("H"="skyblue2", "D"="green3", "A"="red3", "F"="purple2"),
-    labels=c("H"="Hatched", "D"="Depredated", "A"="Abandoned", "F"="Failed (other)")
-  )
-intPlot
-# plogis(predict(fitted_model)) should convert the log-odds output of the model
-# to a probability; use predict(fitted_model, type="response") to see prob
-# of your data values.. can also calculate probs by hand if you want
-
-dataMod$probfull <- plogis(predict(mods[[1]]))
-dataMod$prob5 <- plogis(predict(mods[[5]]))  
-
-y = "probfull"
-x1 = "nest_age"
-x2 = "species"
-
-ggplot(dataMod, aes(x=.data[[x1]], y=.data[[y]])) +
-  geom_point(aes(color=.data[[x2]])) + 
-  geom_abline()
-```
-
-#### Odds ratios
-
-```{r q1-OR, eval=FALSE, include=FALSE}
-# knitr::include_graphics(filename2,
-#                         dpi=(1300/6)) # dpi setting = only thing that works
-oddrat <- mods |> 
-  discard(is.null) |>
-  odd_rat()
-oddrat
-```
-
-When we don't impute the NAs, it's a complete cases analysis (all NA
-rows removed automatically) BUT I need to be the one to remove the rows,
-or I'll be comparing models with different sample sizes
 
 
 ### USING THE IMPUTED DATASETS:
@@ -664,6 +592,7 @@ IF using the reduced data for question 2, print plots/tables again
 
 ```{r q2, echo=TRUE}
 question <- "Was nest fate classified correctly in the field?"
+quest    <- "_q2"
 # datName <- "ndGLM_scl_redcc"
 cat(question)
 dat <- get(datName)
@@ -702,77 +631,11 @@ sjPlot::plot_model(mods[[5]], type="int") +
 ```{r echo=TRUE}
 ```
 
-#### Create and save the AIC table
+### CREATE AIC TABLES AND REGRESSION TABLES:
 
-```{r q2-aic, echo=FALSE}
-# fname <- mods %>% bic_mod() %>% save_tab()
-# suffix = paste0("_unscl_cc_q2_", nfate, "_fates")
-# suffix = paste0("-",datName,"-q2-", nfate, "fates")
-suffix = paste0("-",datName,"-q2-", uVar,fVar)
-# suffix = "_scl_cc_q1"
-
-aicTab <- unname(mods) %>% aic_mod()
-fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
-cat("creating AIC table; filename =",fname)
-
-knitr::include_graphics(paste0("analysis/",fname),
-                        dpi=(1300/6)) # dpi setting = only thing that works
-
+```{r q2_aic, child="fate_GLM_AICc.Rmd"}
 ```
 
-#### Create and save the regression table for the best model
-
-```{r q2-regtab, echo=TRUE}
-# first, find the number of the best model
-# modnum = 13# manually enter number for top model
-# get all the model names:
-modNames <- as.list(modnames(mods)) # list of models in the order they were specified
-# c <- confset(cand.set=mods, modnames=modNames, method='raw')
-# 
-# while(aWeight < 0.95){
-#   
-#
-topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
-cat("top model:", topMod)
-secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
-cat("second best model:", secTopMod)
-cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
-modnum = which(modNames == topMod)
-modnum2 = which(modNames == secTopMod)
-cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula) )
-
-regrTab <- tabRegr(modNum=modnum,
-                   mods=mods,
-                   resp=resp,
-                   debug=T,
-                   # suffix =paste0("q2_",nfate,"fates"))
-                   suffix =paste0(datName,"q2_",uVar,fVar))
-knitr::include_graphics(paste0("analysis/",regrTab), 
-                        dpi=(1300/6)) # dpi setting = only thing that works
-# confSet <- length(which(cumsum(aicTab$`_data`$weight)<0.95))
-# confSet <- which(cumsum(aicTab$`_data`$weight)<0.95) # this doesn't get the last one unless it sums to exactly 0.95
-```
-
-
-```{r q2-regtab2, eval=FALSE, include=FALSE}
-newNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
-vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
-vnames <- as.list(newNames)
-names(vnames) <- vars
-  
-                    
-tabOR <- gtsummary::tbl_regression(mods[[modnum]],
-                          label = vnames,
-                          # label= list(
-                          #   # resp~paste(r), # can't label response var
-                          #             species~"SPECIES",
-                          #             nest_age~"NEST_AGE",
-                          #             obs_int~"FINAL_INTERVAL",
-                          #             cam_fate~"TRUE_FATE",
-                          #             fdate~"END_DATE"),
-                          exponentiate=T)
-
-```
 
 ### USING THE IMPUTED DATASETS:
 ```{r}

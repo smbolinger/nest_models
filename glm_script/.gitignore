@@ -64,7 +64,7 @@ cleaned_data/
 *.png
 *.jpg
 
-#other
+# other
 ~$*
 *.html
 *.txt

@@ -1,0 +1,307 @@
+---
+title: "missing"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+### a. Specify the data and variables to use
+
+```{r uughughuhguh, echo=TRUE}
+# This is mostly for naming files in an informative way.
+
+# datName = "ndGLM1" # need to put this in main script bc it changes depending on when 
+#                      you create the plots
+# datName = "ndGLM_"
+# prVars <- c("species", "cam_fate", "obs_int", "nest_age", "fdate")
+dat = get(datName)
+# print doesn't work here
+# print("data used for diagnostics:", datName)
+cat("data used for diagnostics:", datName)
+
+fVar <- "allFates"
+uVar <- "_UHisU_"
+if(UHisH) uVar <- "_UHisH_" 
+if(exists("nfate")) fVar <- paste0("-",nfate,"fates")
+
+if(FALSE){
+  fname <- paste("nest_data/",datName, uVar, now, ".csv", sep="_")
+  write.csv(dat, fname)
+}
+# number of fate categories:
+# fVar <- paste0("-",nfate,"fates")
+```
+
+### Check for separation:
+
+
+```{r sep1, eval=FALSE, include=FALSE}
+#### Plot to check visually for separation
+sepPlot <- function(ndGLM1){
+  plotList <- list()
+  ndLongCont <- ndGLM1 %>%
+    select(misclass,HF_mis,is_u,fdate,nest_age,obs_int) %>%
+    # pivot_longer(everything(),
+    pivot_longer(cols=!c(misclass,HF_mis,is_u),
+                 names_to="predictor",
+                 values_to="level")
+  plotList[[1]] <- ggplot(ndLongCont, aes(x=level,y=misclass,color=predictor)) +
+    geom_point()
+  
+  plotList[[2]] <- ggplot(ndLongCont, aes(x=level,y=HF_mis,color=predictor)) +
+    geom_point()
+  
+  plotList[[3]] <- ggplot(ndLongCont, aes(x=level,y=is_u,color=predictor)) +
+    geom_point()
+  
+  ndLongCat <- ndGLM1 %>%
+    select(misclass,HF_mis,is_u,species,cam_fate) %>% 
+    pivot_longer(cols=c(species,cam_fate),
+                 names_to="predictor",
+                 values_to="level")
+  
+  plotList[[4]] <- ggplot(ndLongCat, aes(x=level,y=misclass,color=predictor)) +
+    geom_point(position="jitter")
+  
+  plotList[[5]] <- ggplot(ndLongCat, aes(x=level,y=HF_mis,color=predictor)) +
+    geom_point(position="jitter")
+  
+  plotList[[6]] <- ggplot(ndLongCat, aes(x=level,y=is_u,color=predictor)) +
+    geom_point(position="jitter")
+  
+  return(plotList)
+}
+
+if(separation) {
+  sepPlot(dat)
+} else {
+  cat("\t\t>> skip")
+}
+```
+
+#### Use "detect_separation" package
+
+```{r sep2, echo=FALSE}
+
+# dat = ndGLM_unscl_cc
+# pl <- sepPlot(dat)
+# pl
+# resp = "misclass"
+if(separation){
+  library(detectseparation)
+  ndGLM_sep <- glm(is_u ~ species + cam_fate + nest_age + obs_int + fdate,
+                   data=dat,
+                   family=binomial(),
+                   method="detect_separation")
+  ndGLM_sep
+  
+  ndGLM_sep <- glm(misclass ~ species + cam_fate + nest_age + obs_int + fdate,
+                   data=dat,
+                   family=binomial(),
+                   method="detect_separation")
+  ndGLM_sep
+  
+  ndGLM_sep <- glm(HF_mis ~ species + cam_fate + nest_age + obs_int + fdate,
+                   data=dat,
+                   family=binomial(),
+                   method="detect_separation")
+  ndGLM_sep
+# }
+} else {
+  cat("\t\t>> skip")
+}
+### These are throwing an error:
+# se_inf <- check_infinite_estimates(ndGLM_sep)
+# plot(se_inf)
+```
+
+
+```{r weird, eval=FALSE, include=FALSE}
+### I don't remember what this one iss
+if(FALSE){
+  # ndGLM_unscl_cc$isu1 <- factor(ndGLM_unscl_cc$isu, levels=c(0,1))
+  levels(ndGLM_unscl_cc$isu)
+  levels(ndGLM_unscl_cc$cam_fate)
+  # fateEffect <- glm(isu ~ cam_fate, data=ndGLM_unscl_cc, family=binomial, method=brglmFit)
+  fateEffect <- glm(is_u ~ cam_fate, data=ndGLM_unscl_cc, family=binomial)
+  fateEffect2 <- glm(misclass ~ cam_fate, data=ndGLM_unscl_cc, family=binomial)
+  # ageEffect <- glm(isu ~ nest_age, data=ndGLM_unscl_cc, family=binomial, method=brglmFit)
+  ageEffect <- glm(isu ~ nest_age, data=ndGLM_unscl_cc, family=binomial)
+  summary(fateEffect)
+  summary(fateEffect2)
+  # tbl_regression(fateEffect)
+  newMods <- list()
+  question <- "blah"
+  newMods[[1]] <- fateEffect
+  newMods[[2]] <- fateEffect2
+  # c(fateEffect, ageEffect)
+  tabRegr(modNum=1, mods=newMods, resp="is_u")
+  tabRegr(modNum=2, mods=newMods, resp="misclass")
+  
+} else {
+  cat("\t\t>> skip")
+}
+  # I get the non-integer #successes error whether it's a categorical or continuous var
+  # but it only happens when using brglmFit
+```
+
+### Examine missing data 
+
+```{r missing-diag, echo=TRUE}
+if(missing_diag){
+  # diag_miss()
+  # dName <- datName
+  # datDiag <- get(dName)
+  # dat_miss(ndGLM_ = datDiag)
+  # miss_tabs(dName = datName,expl = prVars,dep = "is_u")
+  # miss_tabs(dName = datName,expl = prVars,dep = "HF_mis")
+  ndDiag <- get(datName)
+  expl = prVars
+  # dep = "is_u"
+  dep = c("HF_mis", "is_u")
+  # creeate an index of variables with at least one NA:
+  exp_index <- lapply(expl, function(x) sum(is.na(ndDiag[x]))) > 0
+  exp_miss <- expl[exp_index] 
+  exp_miss
+  # ndDiag <- datDiag %>%
+  #   dplyr::mutate(missAge = is.na(nest_age), # is this part necessary?
+  #          missFate = is.na(cam_fate),
+  #          missInt = is.na(obs_int),
+  #          missDate = is.na(fdate))
+  # dep <- "is_u"
+  # expl <- c("nest_age", "cam_fate", "species", "obs_int", "fdate")
+
+  # missPl <- ndDiag %>% finalfit::missing_pairs(dependent=dep, explanatory=expl)
+  # ggsave("missing_data.png", plot=missPl)
+  tabNames <- list()
+  # for(v in seq_along(exp_miss)){
+  for(v in which(exp_index)){ # use the index for the vars withint expl
+    # v=1
+    # expl[v]
+    # expl[-v]
+    missTab <- ndDiag %>%
+      dplyr::mutate(across(c(species, cam_fate), as.factor)) 
+    missTab <- missTab %>%
+      # finalfit::missing_compare(dependent = exp_miss[v], # this should be the table
+      # for this table, "dependent" is the independent var that is being compared
+      finalfit::missing_compare(dependent = expl[v], # this should be the table
+      # finalfit::missing_pairs(dependent = expl[v],  # this is the plot
+                                # explanatory = expl[expl!=v])
+                                explanatory = expl[-v])
+    # print(missTab)
+    titl <- names(missTab)[1]
+    names(missTab) <- c("var", "val", "not_missing", "missing", "p")
+    missTabFancy <- missTab %>%
+      gt::gt(rowname_col = "var") %>%
+      gt::tab_header(title=titl) %>%
+      gt::cols_label(val ~ "",
+                 not_missing ~ "Not missing (percent)",
+                 missing ~ "Missing (percent)",
+                 p ~ "p-value") %>%
+      # nestGLM::save_tab(suffix=paste(dName,dep,expl[v],uVar,sep="_"), rtf=TRUE)
+      nestGLM::save_tab(suffix=paste(datName,expl[v],uVar,sep="_"), rtf=TRUE)
+    tabNames[v] <- missTab
+    for(i in seq_along(dep)){
+    missPP <- ndDiag %>%
+      finalfit::missing_pairs(dependent = dep[i],
+                              explanatory = expl,
+                              position = "fill")
+    }
+    now = format(Sys.time(), "_%m%d_%H%M_")
+    fname <- paste0(homeDir,"glm_script/figures/pp_",datName,dep[i],expl[v],uVar,now,".svg")
+    ggsave(plot=missPP, filename = fname)
+  }
+  
+  # dName <- "ndGLM1"
+  # # ndDiag <- ndGLM1 %>%
+  # 
+  # ndDiag <- datDiag %>%
+  #   mutate(missAge = is.na(nest_age),
+  #          missFate = is.na(cam_fate),
+  #          missInt = is.na(obs_int),
+  #          missDate = is.na(fdate))
+  # dep <- "is_u"
+  # expl <- c("nest_age", "cam_fate", "species", "obs_int", "fdate")
+  #   
+  # missPl <- ndDiag %>% finalfit::missing_pairs(dependent=dep, explanatory=expl) 
+  # # ggsave("missing_data.png", plot=missPl)
+  # missTabAge <- ndDiag%>% 
+  #   finalfit::missing_compare(dependent="nest_age", 
+  #   explanatory=c("species", "fdate", "cam_fate", "obs_int")) #%>%
+  # print(missTabAge)
+  # titl <- names(missTabAge)[1]
+  # names(missTabAge) <- c("var", "val", "notMissing", "missing", "p")
+  # missTabAge2 <- missTabAge %>%
+  #   gt(rowname_col = "var") %>%
+  #   tab_header(title=titl) %>%
+  #   cols_label(val ~ "",
+  #              notMissing ~ "not missing (percent)",
+  #              missing ~ "missing (percent)",
+  #              p ~ "p-value") %>%
+  #   nestGLM::save_tab(suffix=paste(dep,dName,sep="_"))
+  # # print(missTabAge2) # this prints all the code that generates the table, instead of the table itself
+  # 
+  # missTabFate <- ndDiag %>% 
+  #   finalfit::missing_compare(dependent="cam_fate", 
+  #                             explanatory=c("species", "fdate", "nest_age", "obs_int"))
+  # print(missTabFate)
+  # 
+  # missTabInt <- ndDiag %>% 
+  #   finalfit::missing_compare(dependent="obs_int", 
+  #                             explanatory=c("species", "fdate", "nest_age","cam_fate" ))
+  # print(missTabInt)
+  
+# }
+} else {
+  cat("\t\t>> skip")
+}
+```
+
+#### Visualize the missing data via missingness maps
+
+```{r missing-map, echo=TRUE}
+if(missing_diag){
+  ndGLM1 %>%
+    dplyr::select(species, cam_fate, fdate, nest_age, obs_int) %>%
+    dplyr::select(where(is.numeric)) %>%
+    visdat::vis_value()  
+
+  # ndGLM1 %>% dplyr::select(species, cam_fate, fdate, nest_age, obs_int, HF_mis, is_u) %>% visdat::vis_dat()
+  ndGLM1 %>%
+    dplyr::select(species, cam_fate, fdate, nest_age, obs_int) %>%
+    visdat::vis_dat()
+
+  ndGLM1 %>%
+    dplyr::select(species, cam_fate, fdate, nest_age, obs_int) %>%
+    # dplyr::select(species, cam_fate, fdate, nest_age, obs_int, HF_mis, is_u) %>%
+    visdat::vis_miss()
+# }
+} else {
+  cat("\t\t>> skip")
+}
+```
+
+#### Plot the missingness of each variable with the original dataset
+
+This plot is probably really big. Not sure if dev.new() is working...
+
+```{r missing-plot, eval=FALSE, include=FALSE}
+  # # from Nakagawa 2015 (in statistics textbook):
+  # PdoPartData is a dataset
+  # Missingness <- ifelse (is.na (PdoPartData) == TRUE, 0, 1) # create the missingness matrix
+  # MissData <- data.frame (PdoPartData, Missingness) # combine the original dataset with the missingness matrix
+  # # library (psych) # loading the psych library
+  # psych::pairs.panels (MissData, ellipses = FALSE, method = "spearman")
+
+if(missing_diag){
+  dev.new()
+  missingness <- ifelse(is.na(datDiag) == TRUE, 0, 1)
+  missData    <- data.frame(datDiag,missingness)
+  # missingness <- ifelse(is.na(ndDiag) == TRUE, 0, 1)
+  # missData    <- data.frame(ndDiag,missingness)
+  psych::pairs.panels(missData, ellipses=FALSE, method="spearman")
+}
+```
+

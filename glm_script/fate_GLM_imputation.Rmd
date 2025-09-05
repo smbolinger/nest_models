@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(eval = FALSE, include = FALSE)
 ```
 ---
 title: "fate_GLM_imputation"
@@ -15,8 +15,6 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-*NOTE* maybe updating R will help? I thought these functions were older than that...
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(eval = FALSE, include = FALSE)
 # library(marginaleffects)
@@ -24,29 +22,13 @@ library(tidyverse)
 library(brglm2) # the line below SHOULD mean I don't have to load this, but it's not working
 ```
 
-```{r}
-imppDat <- get(datNameImp)
-# (see chunk further down)
-regMet <- "brglm_fit"
-# regMet  <- "brglm2:::brglm_fit"
-# regMet  <- "brglm2::brglmFit"
-fam     <- binomial
-iter    <- 500
-fVar <- "_allFates"
-uVar <- "_UHisU"
-if(UHisH) uVar <- "_UHisH" 
-if(exists("nfate")) fVar <- paste0("_",nfate,"fates") # exists seems to be more complicated than I thought...
-cat("* * * * * * * * * * * * * * * * * * * * * * * * * * * *")
-cat("\n* imputation using this data:", datNameImp)
-cat("\n* and this response variable:", resp)
-# cat("\nand this method:", impMet)
-cat("\n* and this method:", regMet)
-cat("\n* * * * * * * * * * * * * * * * * * * * * * * * * * * *")
-```
+## Run all of these once:
 
-Perform the multiple imputations
+### Functions
 
 ```{r, warning=FALSE}
+###  to perform the multiple imputations ###############################################
+
 # impRes <- impDat %>%
 #   select(nest, nest_age, obs_int, cam_fate, fdate, species, HF_mis, misclass, is_u) %>%
 #   # runImpMods(.,modList=modList,resp="is_u")
@@ -70,10 +52,8 @@ imputeDat <- function(impDat1, m = 10, return = "complete"){
 }
 ```
 
-Fit the models using each of the m datasets
-
 ```{r, warning=FALSE}
-
+# fit the models using each of the m datasets
 impFit <- function(impDat, modList){
   
     impMod <- vector(mode="list", length=length(modList))
@@ -92,10 +72,8 @@ impFit <- function(impDat, modList){
     return(impMod)
     
 }
-```
 
-
-```{r, warning=FALSE}
+# pool the results
 poolImp <- function(impMod, modList){
   impModPool <- vector(mode="list", length=length(modList))
   
@@ -109,7 +87,89 @@ poolImp <- function(impMod, modList){
 }
 ```
 
-Create a small set of imputations (m=10) for testing code (does not run during knitting)
+```{r}
+# dat <- impDat
+# modnum=top_num
+# plot_type = "pred"
+# # if(grepl("*", modList[top_num], fixed=TRUE)){
+# vars = c(intVar1, intVar2)
+# y_lab="e"
+# x_lab="jjkjk"
+# grid1 <- intGridAge
+```
+
+```{r}
+# create the interaction plots
+grpColor <- c(LETE="#AA4499", CONI="#44AA99")
+intPlot <- function(dat, 
+                    modnum, 
+                    plot_type = "pred", 
+                    vars=c("species", "nest_age"),
+                    y_lab = "Predicted probability of\n misclassification",
+                    x_lab = "Nest age - centered (days)",
+                    # grid=intGrid1 # probably shouldn't have the same name as a function?
+                    # grid1=intGrid1 # probably shouldn't have the same name as a function?
+                    grid1
+                    ){
+  
+    model   <- with(dat,
+                    glm(as.formula(paste0(resp, modList[[modnum]])),
+                    family=binomial,
+                    method=regMet
+                    ))
+    
+    intSlope <- marginaleffects::slopes(model,
+                                        variables=vars,
+                      # variables=c("species", "obs_int"),
+                      newdata=grid1)
+    #  from the documentation: 
+    #  Warning: Slopes and elasticities can only be calculated for continuous numeric variables. The slopes() functions will automatically revert to comparisons() for binary or categorical variables.
+    #  
+    #  Why are all the predictions only a few values?
+    intPred <- marginaleffects::predictions(model,
+                                            newdata=grid1,
+                                            # variables=c("species", "nest_age"))
+                                            # so was this always working with these 2 variables?
+                                            variables=vars
+                                            )
+    
+    # this one gives a list as output:
+    # plDat   <- ifelse(plot_type=="slope",as.data.frame(intSlope),as.data.frame(intPred))
+    plDat <- intPred
+    if(plot_type=="slope") plDat <- intSlope
+    # the confidence intervals in this plot don't seem wide enough...
+    # plDat <- case_when(plot_type == "pred" ~ intPred,
+    #                    plot_type == "slope" ~ intSlope)
+    # ggplot(intPred,
+    mm <- sym(vars[1])
+    xx <- sym(vars[2])
+    colores <- c("")
+    g <- ggplot(plDat,
+           # aes(x=obs_int, y=estimate, ymin=conf.low, ymax=conf.high, color=species)) +
+           # aes(x=as.numeric(obs_int), y=estimate, ymin=conf.low, ymax=conf.high, color=species)) +
+           aes(x=!!xx, y=estimate, color=!!mm)) +
+      # geom_point() +
+      labs(x=x_lab, y=y_lab)+
+      scale_color_manual(values=grpColor,
+                         labels=c("Common\nNighthawk", "Least Tern"),
+                         name="Species") +
+      geom_smooth(method=NULL) +
+      theme_classic() +
+      theme(axis.text = element_text(size=18),
+      axis.title = element_text(size=20), # can't do margins for x and y axis titles at once
+      legend.text=element_text(size=16),
+      legend.title=element_text(size=18),
+      axis.title.y = element_text(margin=margin(r=5)),
+      axis.title.x = element_text(margin=margin(t=5))) 
+      # geom_ribbon(alpha=0.2) +
+      # geom_line()
+  }
+# }
+```
+
+### Create a small set of imputations (m=10) for testing code (does not run during knitting)
+
+Also tells R to use the smaller set for the other functions
 
 ```{r eval=FALSE, include=FALSE, warning=FALSE}
 # impute, without completing the datasets so you can use the fit command?
@@ -123,33 +183,61 @@ smallPool <- poolImp(smallFit, modList)
 
 # impDatsmall  <- mice::mice(impDat1, seed=613, m=10, printFlag=FALSE)
 # impDatsmall2 <- mice::complete(impDatsmall, "all") # generate a list of all the completed datasets
-```
-
-Create more imputed datasets (m=100)
-
-```{r, warning=FALSE}
-impDat       <- imputeDat(impDat1 = imppDat, m=100, return="")
-impMod       <- impFit(impDat = impDat, modList = modList)
-impModPool   <- poolImp(impMod = impMod, modList= modList)
-```
-
-***********************************************************************
- SPECIFY WHICH IMPUTED DATASET TO USE:
-***********************************************************************
-```{r eval=FALSE, include=FALSE}
 impDat <- impDat_small
 impMod <- smallFit
 impModPool <- smallPool
 ```
 
-Extract the degrees of freedom, as well as the average AIC, Akaike weight, & log likelihood (across all imputations) for each model, and create the AIC table.
+### Create imputed datasets (m=100)
+
+Really only need to create the imputed data once
+
+```{r, warning=FALSE}
+imppDat <- get(datNameImp)
+impDat       <- imputeDat(impDat1 = imppDat, m=100, return="")
+```
+## .
+#########################################################################################
+#########################################################################################
+## Run all of these for each separate analysis:
+
+### Settings
+
+```{r}
+# (see chunk further down)
+regMet <- "brglm_fit"
+# regMet  <- "brglm2:::brglm_fit"
+# regMet  <- "brglm2::brglmFit"
+fam     <- binomial
+iter    <- 500
+fVar <- "_allFates"
+uVar <- "_UHisU"
+if(UHisH) uVar <- "_UHisH" 
+if(exists("nfate")) fVar <- paste0("_",nfate,"fates") # exists seems to be more complicated than I thought...
+cat("* * * * * * * * * * * * * * * * * * * * * * * * * * * *")
+cat("\n* imputation using this data:", datNameImp)
+cat("\n* and this response variable:", resp)
+# cat("\nand this method:", impMet)
+cat("\n* and this method:", regMet)
+cat("\n* * * * * * * * * * * * * * * * * * * * * * * * * * * *")
+```
+
+### Fit & pool the results
+
+```{r, warning=FALSE}
+# uses the response specified in fate_GLM1.Rmd
+impMod       <- impFit(impDat = impDat, modList = modList)
+impModPool   <- poolImp(impMod = impMod, modList= modList)
+```
+
+### Create the AIC table with the model fit using the imputed data
+
+Extract the degrees of freedom, as well as the average AIC, Akaike weight, & log likelihood 
+(across all imputations) for each model, and create the AIC table.
 
 ```{r}
 # lapply(impRes, summary)
-fname <- paste0(datName,"_impAIC",quest,uVar,fVar)
-# aicImp <- aicImpMods(impModPool = impRes,modList = modList,filePrefix = fname)
-# aicImp <- aicImpMods(impModPool = impRes,modList = modList,mods=mods,filePrefix = fname)
-# aicImp <- aicImpMods(impModPool = impModPool,modList = modList,mods=mods,filePrefix = fname)
+fname <- paste0(datNameImp,"_impAIC",quest,uVar,fVar)
 
 # need to have fit the models in the main script for this to work (just for naming):
 aicImp <- aicImpMods(impModPool = impModPool,modList = modList,mods=mods,filePrefix = fname)
@@ -165,7 +253,7 @@ knitr::include_graphics(paste0("analysis/",aicImp),
                         dpi=(1300/6)) # dpi setting = only thing that works
 ```
 
-Create the pooled regression table for the top model:
+### Create the pooled regression table for the top model:
 
 ```{r, warning=FALSE}
 # top_num <- aicTabImp$num[1]
@@ -174,13 +262,30 @@ top_num <- as.numeric(rownames(aicTabImp)[1])
 sec_top <- as.numeric(rownames(aicTabImp)[2])
 # 
 cat("top model:", modList[top_num])
+intVar1 <- str_extract(string = modList[top_num],
+                       pattern = "\\w+(?=\\s\\*)")
+
+intVar2 <- str_extract(string = modList[top_num],
+                       pattern = "(?<=\\*\\s)\\w+")
+
+cat("\ninteraction variables:", intVar1, intVar2)
 # secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
-cat("\nsecond best model:", modList[sec_top])
+cat("\n\nsecond best model:", modList[sec_top])
+intVar1.2 <- str_extract(string = modList[sec_top],
+                       pattern = "\\w+(?=\\s\\*)")
+
+intVar2.2 <- str_extract(string = modList[sec_top],
+                       pattern = "(?<=\\*\\s)\\w+")
+
+cat("\ninteraction variables:", intVar1.2, intVar2.2)
 cat("\ndelta AIC of second best model:", aicTabImp$deltaAIC[2])
 
-cat("creating regression table for top model, model number", top_num, "; model formula:", paste(modList[top_num]))
+cat("\n\ncreating regression table for top model, model number", top_num, "; \nmodel formula:", paste(modList[top_num]))
 # impTab <- impModTab(impModPool = impRes,modList = modList)
+```
 
+
+```{r, warning=FALSE}
 # this works:
 
 # fit <- with(impDat, glm(as.formula(paste(resp1, modList[[5]])), family=binomial, method=brglm2::brglmFit)) 
@@ -203,30 +308,10 @@ summ.fit %>%
 
 ```
 
-```{r eval=FALSE, include=FALSE}
- # compLists <- function(list1, list1num=1, list2, list2num=1, cat=TRUE){
- compLists <- function(list1, list1num=NA, list2, list2num=NA, cat=TRUE){
-    # setdiff(names(mods[[4]]), names(modFit[[4]]))
-    # setdiff(names(modFit[[4]]), names(mods[[4]]))
-    if(is.na(list1num)){
-      if(cat) cat(sprintf("In %s but not %s:\n", list1, list2))
-      cat(setdiff(names(get(list1)), names(get(list2))))
-      if(cat) cat(sprintf("In %s but not %s:\n", list2, list1))
-      cat(setdiff(names(get(list2)), names(get(list1))))
-    } else {
-      if(cat) cat(sprintf("In %s[[%s]] but not %s[[%s]]:\n", list1, list1num, list2, list2num))
-      cat(setdiff( names( get(list1) [[list1num]] ), names( get(list2) [[list2num]] ) ))
-      # cat(sprintf("In %s but not %s:", list2, list1))
-      if(cat) cat(sprintf("\n\nIn %s[[%s]] but not %s[[%s]]:\n", list2, list2num, list1, list1num))
-      cat(setdiff( names( get(list2) [[list2num]] ), names( get(list1) [[list1num]] ) ))
-    # they mostly have the same components
-    }
-  }
-```
 
-Plot the marginal effects if there is an interaction in the top model:
+### Plot the marginal effects if there is an interaction in the top model:
 
-Can also use a combination of interplot package and output from mitools (see interplot documentation)
+For other methods I tried that didn't work, see old_code document
 
 Or use stratification as seen here: https://www.bookdown.org/rwnahhas/RMPH/mi-mlr.html
 
@@ -236,388 +321,96 @@ marginaleffects package:
 
 When M is continuous, use the predictions() function because calculating an average for each value of a continuous variable is not practical.
 
-```{r eval=FALSE, include=FALSE}
-# modList[top_num]
-# modList[5]
-# grepl("*", modList[5], fixed=TRUE)
-# impRes[top_num] # these are pooled results (class mipo)
-if(grepl("*", modList[top_num], fixed=TRUE)){
-  # mfx_topmod <- avg_slopes(impRes, by=)
-  # impMod <- readRDS("impMod.rds") # load the unpooled imputation results (class mira)
-  datagrid_bal <- function(...) marginaleffects::datagrid(..., grid_type="balanced")
-  fitMod <- function(x, modnum){
-    # form <- as.formula(paste(resp, modList[[top_num]]))
-    form <- as.formula(paste(resp, modList[[modnum]]))
-    # mod <- glm(as.formula(paste(resp, modList[[top_num]])),
-    # cat("formula:", as.character(form))
-    mod <- glm(formula = form,
-               data = x,
-               family=binomial,
-               method=regMet # this might be throwing off the marginal effects function
-               # actually I don't think it's this line; still getting warning
-               # adding the brglm_fit method is the only way I get std error output
-               )
-    # out <- marginaleffects::comparisons(mod,
-    #                                     variables="species",
-    #                                     newdata = datagrid(nest_age=
-    #                                                        )
-                                        # )
-    # *may need to plot after pooling;
-    # ERROR: "no `tidy()` method for objects of class <gg/ggplot>
-    # out <- marginaleffects::plot_predictions(mod, 
-    return(mod)
-  }
-  # marge <- function(mod, intGrid){
-  marge <- function(mod, intGrid=1){
-    # this one gives a weird warning
-    # Warning: These arguments are not known to be supported for models of class `glm`: condition. All arguments are still passed to the model-specific prediction function, but users are encouraged to check if the argument is indeed supported by their modeling package. Please file a request on Github if you believe that an unknown argument should be added to the `marginaleffects` white list of known arguments, in order to avoid raising this warning: https://github.com/vincentarelbundock/marginaleffects/issues
-    # it's saying that "condition" isn't verified to work with 'glm' objects, but 
-    # the package creators do it in the tutorial on their website!
-    # they have: plot_predictions(mod, condition = c("M", "X")) where mod is a glm
-    # so maybe that means it DOES work? 
-    
-    # works better with "newdata" argument? no longer throws warning. 
-    # still doesn't output std.error when called with lapply
-    # maybe try a for loop instead?
-    # mod = fitMod(impDatsmall2[[1]], 4)
-    # out <- marginaleffects::predictions(mod,  newdata= intGrid)
-    out <- marginaleffects::comparisons(mod,  newdata= intGrid)
-    # out <- marginaleffects::predictions(mod,  newdata=datagrid_bal())
-    # how is predictions different from the regular predict function???
-    # more detailed output, more flexibility, also gives the marginal predictions 
-    # just need a way to get the standard errors.
-    
-                                              # marginaleffects::datagrid(species=c("CONI", "LETE"),
-                                                                              # nest_age=c(1:30)))
-                                                                              # nest_age=c(-15:15)))
-                                        # condition=c("nest_age", "species"))
-    out$term <- out$species
-    return(out)
-  }
+#### Create the datagrid objects that marginal effects will use as "newdata" when making predictions
+
+```{r}
+
+# if(grepl("*", modList[top_num], fixed=TRUE)){
   
-```
+# intGridNew1 <- marginaleffects::datagrid(newdata=ndGLM_scl,
+intGridAge <- marginaleffects::datagrid(newdata=ndGLM_scl,
+                                         species=c("CONI", "LETE"),
+                                         # nest_age= c(-15:15)) # using the centered data
+                                         nest_age= seq(-15, 15, length.out=100)) # using the centered data
+                                     # obs_int = c(-4:6))
 
-
-```{r eval=FALSE, include=FALSE}
-impDatsmall  <- imputeDat(impDat1 = imppDat, return="")
-impDatsmall2 <- imputeDat(impDat1 = imppDat) # return the list of all completed datasets
-# impDatsmall2 <- mitools::imputationList(impDatsmall)
-# miPl <- interplot::interplot(impDatsmall2) # the documentation claims interplot works with  
-                                           # the output from mitools, but this isn't working
-
-# but their example just shows it working with the output from the with() call
-# this obviously uses the original mice output and not the list of completed datasets
-# modFit2 <- function(dat, modnum){
-modnum = 4
-dd     = impDatsmall
-ff <- as.formula(paste0(resp, modList[[modnum]]))
-# mf <- with(dd, glm(ff, family=binomial, method=regMet))
-mf <- with(dd, glm(as.formula( paste0( resp, modlist[[modnum]] ) ),
-                   family=binomial,
-                   method=regmet
-                   ))
-  # return(mf)
+intGridObs  <- marginaleffects::datagrid(newdata=ndGLM_scl,
+                                          species=c("CONI", "LETE"),
+                                         # obs_int = c(-4:6)) # not a lot of values - hard to 
+                                                            # get a smooth curve
+                                         # using 1000 values doesn't seem to help with slopes plot
+                                         # and it makes intPred have 20,000 observations
+                                         # obs_int = seq(from=-4, to=6, length.out=1000)) 
+                                          obs_int = seq(from=-4, to=6, length.out=100)) 
+                                           
 # }
-
-mf2 <- modFit2(dat=impDatsmall,
-               modnum=4)
-# mForm <- paste(resp, modList, sep=" ")
-# modFit2 <- with(impDatsmall2)
-
-miPl <- interplot::interplot(impMod[[4]]) # this also doesn't work.
-```
-
-What this does:
-
-- Fit the model with each of the imputed datasets
-- Compute the marginal effects for each fit
-- Pool the results
-
-```{r echo=TRUE}
-# modnum = 4
-# datdat = impDatsmall2
-```
-
-```{r}
-
-if(grepl("*", modList[top_num], fixed=TRUE)){
-  
-  intGridNew1 <- marginaleffects::datagrid(newdata=ndGLM_scl,
-                                           species=c("CONI", "LETE"),
-                                           # nest_age= c(-15:15)) # using the centered data
-                                           nest_age= seq(-15, 15, length.out=100)) # using the centered data
-                                       # obs_int = c(-4:6))
-  
-  intGridNew2  <- marginaleffects::datagrid(newdata=ndGLM_scl,
-                                            species=c("CONI", "LETE"),
-                                           # obs_int = c(-4:6)) # not a lot of values - hard to 
-                                                              # get a smooth curve
-                                           # using 1000 values doesn't seem to help with slopes plot
-                                           # and it makes intPred have 20,000 observations
-                                           # obs_int = seq(from=-4, to=6, length.out=1000)) 
-                                            obs_int = seq(from=-4, to=6, length.out=100)) 
-                                             
+if(resp=="is_u"){
+  yl = "Predicted probability of\nunknown field fate"
+} else {
+  yl = "Predicted probability of \nmisclassification"
 }
+# intGridNew3 <- marginaleffects::datagrid(newdata=ndGLM_scl,
+#                                          species=c("CONI", "LETE"),
+#                                          )
 
 ```
-
-
 ```{r}
-# dat  <- impDatsmall
-# vars <- c("species", "nest_age")
-# modnum <- 5
-# plot_type <- "pred"
-# grid      <- intGrid1
-
-intPlot <- function(dat, 
-                    modnum, 
-                    plot_type = "pred", 
-                    vars=c("species", "nest_age"),
-                    y_lab = "Predicted probability of\n misclassification",
-                    x_lab = "Nest age - centered (days)",
-                    grid=intGrid1
-                    ){
-  
-  model   <- with(dat,
-                  glm(as.formula(paste0(resp, modList[[modnum]])),
-                  family=binomial,
-                  method=regMet
-                  ))
-  
-  intSlope <- marginaleffects::slopes(model,
-                    variables=c("species", "obs_int"),
-                    newdata=grid)
-  #  from the documentation: 
-  #  Warning: Slopes and elasticities can only be calculated for continuous numeric variables. The slopes() functions will automatically revert to comparisons() for binary or categorical variables.
-  #  
-  #  Why are all the predictions only a few values?
-  intPred <- marginaleffects::predictions(model,
-                                          newdata=grid,
-                                          variables=c("species", "nest_age"))
-  
-  # this one gives a list as output:
-  # plDat   <- ifelse(plot_type=="slope",as.data.frame(intSlope),as.data.frame(intPred))
-  plDat <- intPred
-  if(plot_type=="slope") plDat <- intSlope
-  # the confidence intervals in this plot don't seem wide enough...
-  # plDat <- case_when(plot_type == "pred" ~ intPred,
-  #                    plot_type == "slope" ~ intSlope)
-  # ggplot(intPred,
-  mm <- sym(vars[1])
-  xx <- sym(vars[2])
-  ggplot(plDat,
-         # aes(x=obs_int, y=estimate, ymin=conf.low, ymax=conf.high, color=species)) +
-         # aes(x=as.numeric(obs_int), y=estimate, ymin=conf.low, ymax=conf.high, color=species)) +
-         aes(x=!!xx, y=estimate, color=!!mm)) +
-    # geom_point() +
-    labs(x=x_lab, y=y_lab)+
-    geom_smooth(method=NULL) +
-    theme_classic() +
-    theme(axis.text = element_text(size=18),
-    axis.title = element_text(size=20), # can't do margins for x and y axis titles at once
-    legend.text=element_text(size=16),
-    legend.title=element_text(size=18),
-    axis.title.y = element_text(margin=margin(r=5)),
-    axis.title.x = element_text(margin=margin(t=5))) 
-    # geom_ribbon(alpha=0.2) +
-    # geom_line()
-}
+# makeIntGrid <- function(xvar, mvar, newD){
+#   
+# }
 ```
 
-```{r}
-if(grepl("*", modList[top_num], fixed=TRUE)){
-  intPlot(impDatsmall,modnum=5)
-  intPlot(impDatsmall,
-          modnum=4, 
-          grid=intGrid2, 
-          vars=c("species", "obs_int"), 
-          x_lab="Final interval - centered (days)")
-}
-```
+#### Go ahead and plot the interactions in all models that are in the top model set:
 
-
-```{r eval=FALSE, include=FALSE}
-lis <- list(impDatsmall, impdf)
-# compLists(impDatsmall, impdf)
-# compLists(lis, 1, lis, 2, cat=FALSE)
-compLists(list1="impDatsmall",
-          list2="impdf")
-          # cat=FALSE)
-```
-
-
-```{r eval=FALSE, include=FALSE}
-# modFit <- lapply(impDatsmall2, fitMod, 4) # gives a list with fit for each dataset
-modFit <- lapply(datdat, fitMod, modnum) # gives a list with fit for each dataset
-  # modMarge <- lapply(modFit, marge, intGrid1)
-  range(ndGLM_scl$obs_int)
-  intGrid1 <- marginaleffects::datagrid(model= mods[[4]],
-                                       species=c("CONI", "LETE"),
-                                       obs_int = c(-4:6))
-    
-  intGrid2 <- marginaleffects::datagrid(model=mods[[5]],
-                                        species=c("CONI", "LETE"),
-                                        nest_age= c(-15:15)) # using the centered data
-  
-  intGridBal <- marginaleffects::datagrid(model=mods[[4]],
-                                          grid_type="balanced")
-  
-  intGridBal2 <- marginaleffects::datagrid(model=mods[[5]],
-                                          grid_type="balanced")
-  
-
-  modMarge <- list()
-  for(m in seq_along(modFit)){ # still no standard error. something to do with mice output?
-    # modMarge[[m]] = marge(modFit[[m]], intGridBal)
-    modMarge[[m]] = marge(modFit[[m]], intGridNew1)
-    # modMarge[[m]] = marge(modFit[[m]])
+```{r, warning=FALSE}
+if(grepl("*", modList[top_num], fixed=TRUE)){ # the defaults are for this model
+  # change the grid used based on which variables are in the interaction:
+  if(intVar2 == "obs_int"){
+    # gr = intGridObs 
+    grName = "intGridObs"
+    lab = "Final interval - centered (days)"
+  } else {
+    # gr = intGridAge
+    grName = "intGridAge"
+    lab = "Nest age - centered (days)"
   }
 
-  mmPool <- mice::pool(modMarge)
-  # mf     <- fitMod(impDatsmall2[[1]], 4)
-  mf     <- fitMod(ndGLM_scl_cc, 4) # this one with the regular data isn't outputting std error either
-                                    # using "condition" seems to work better than "newdata" for SE
-                                    # but it explicitly tells me I have to use newdata
- 
-  # compLists("mods[[4]]", "modFit[[4]]")
-  # names(modFit[[4]])
-  # setdiff(names(modFit[[4]]), names(mods[[4]]))
-  # x <- "mods"
-  # xn <- get(x)[[4]]
-  # names(get(x)[[4]])
-  # y <- "modFit"
-  # setdiff(names(get(x)[[4]]), names(get(y)[[4]]))
-  # setdiff(names(get(y)[[4]]), names(get(x)[[4]]))
-  compLists("mods", 4, "modFit", 4)
-  
-  datdat <- list(ndGLM_scl, ndGLM_scl_cc)
-  compLists("datdat", 1, "impDatsmall2", 1)
-  mm     <- marge(mf, intGrid1)
-  
-  # impMarge <- lapply()
-  
-  # modFit2 <- modFit
-  # modFitPlot <- modFit
-  # modPlotDat <- lapply(modFitPlot, function(x) x[["data"]])
-  # for pooling, need the standard error? 
-  #     Error in pool.vector(w, dfcom = dfcom, custom.t = custom.t, rule = rule) : 
-  #     Column(s) not found: std.error
-  # plotPool <- mice::pool(modPlotDat)
-  # intMod <- mice::pool(modFit)
-  
-  # try using the un-imputed data fit:
-  mfx <- marginaleffects::predictions(mods[[5]], condition=c("nest_age", "species"))
-  # this ^^ gives me output INCLUDING std.error (which I don't get above) but still gives
-  # the same warning. also, it says the deg of freedom = infinity
-  
-  dat <- impMod[[top_num]]
-  sjPlot::plot_model(impModPool[[top_num]], type="int")
-  }
-```
-
-Supposedly, the marginaleffects functions can take mice output as input:
-
-```{r eval=FALSE, include=FALSE}
-if(grepl("*", modList[top_num], fixed=TRUE)){
-  
-  intVar1 <- str_extract(string = modList[top_num],
-                         pattern = "\\w+(?=\\s\\*)")
-  
-  intVar2 <- str_extract(string = modList[top_num],
-                         pattern = "(?<=\\*\\s)\\w+")
-  
-  cat("top model:",modList[top_num])
-  cat("interaction variables:", intVar1, intVar2)
-  
-  
-  library(marginaleffects)
-  # names(coef(impModPool[[5]]))
-  # modelNames <- modnames(mods)
-  # # this one works, but I think it's supposed to be for categorical:categorical interactions
-  # mfx5 <- marginaleffects::avg_slopes(impMod[[5]], variables="nest_age", by="species")
-  
-  # these two give this error:
-  # Error: Please supply a data frame to the `newdata` argument explicitly.
-  # mfx5 <- marginaleffects::plot_predictions(impMod[[5]], variables="nest_age", by="species")
-  # mfx5 <- marginaleffects::plot_predictions(impMod[[5]],condition=c("nest_age", "species"))
-  # mfx5 <- marginaleffects::plot_predictions(impMod[[5]],newdata="grid", by="nest_age")
-  
-  
-  # this one gives this error, despite the instructions online using datagrid and model:
-  # Error: The `model` and `newdata` arguments are both `NULL`. When calling `datagrid()`
-# *inside* the `slopes()` or `comparisons()` functions, the `model` and `newdata`
-# arguments can both be omitted. However, when calling `datagrid()` on its own, users
-# must specify either the `model` or the `newdata` argument (but not both).
-# 
-  # impDat_small$nest_age
-  # mfx5 <- marginaleffects::plot_predictions(impMod[[5]],
-  #                                           newdata=
-  #                                             marginaleffects::datagrid(species=c("C", "L"),
-  #      
-  # getVal <- function(intVar){
-  # #                                                                             nest_age=c(1:30)))
-  #   if(class(ndGLM_[[intVar]])==("factor"|"character")){
-  #     intVal = unique(ndGLM_[[intVar]])
-  #   } else if(class(ndGLM_[[intVar]])==("integer"|"numeric")){
-  #     intVal = range(ndGLM_intVar)
-  #   } else {
-  #     intVal = " "
-  #   }
-  # }
-  # getVal(intVar1)
-  # 
-  # class(ndGLM_[[intVar2]])
-  # gridMod <- datagrid((!!sym(intVar1)))
-  mfx <- marginaleffects::predictions(impMod[[5]], newdata=datagrid(species=c("CONI", "LETE"),
-                                                                    # nest_age=c(1:30)))
-                                                                    nest_age=c(-15:15)))
-  # does the predictions function know it's a binomial logistic regression?
-  # what value is estimate, exactly?? coefficients?
-  
-  # plot(x = mfx, y = )
-  mfx_pl <- ggplot(mfx, aes(x = nest_age, y = estimate, color=species)) +
-    # geom_line()
-    # geom_smooth( se = TRUE)
-    geom_smooth( method="glm")
-
-  
-  mfx_pl
-  
-  mfx2 <- marginaleffects::predictions(impMod[[4]], newdata=datagrid(species=c("CONI", "LETE"),
-                                                                    # nest_age=c(1:30)))
-                                                                    nest_age=c(-15:15)))
-  mfx_pl2 <- ggplot(mfx2, aes(x = nest_age, y = exp(estimate), color=species)) +
-    # geom_line()
-    # geom_smooth( se = TRUE)
-    geom_smooth( method="lm")
-  
-  mfx_pl2
-  # sjPlot:
-  # mfx_topmod <- marginaleffects::avg_slopes(impMod[[top_num]], variables="nest_age", by="species")
-  # mfx_topmod <- marginaleffects::avg_slopes(dat, variables="nest_age", by="species")
-  # # mfx_topmod <- marginaleffects::avg_slopes(impMod[[top_num]], variables=c("nest_age", "species") )
-  # marginaleffects::plot_predictions(model = dat, condition=c("nest_age", "species"))
-  # 
+  intPlot(impDat,                             # (interaction between species & nest_age)
+          # modnum=5)
+          modnum=top_num,
+          vars = c(intVar1, intVar2), # in this case, intVar1 should always be species
+          # grid1=gr,
+          grid1=get(grName),
+          x_lab=lab,
+          y_lab=yl)
+  # ,
+          # y_lab="Predicted probability of\n unknown field fate")                   
 }
 ```
 
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r, warning=FALSE}
+if(grepl("*", modList[sec_top], fixed=TRUE)){
+  # if("obs_int" %in% c(intVar1.2, intVar2.2)){
+  if(intVar2.2 == "obs_int"){
+    # gr = intGridObs
+    grName = "intGridObs"
+    lab = "Final interval - centered (days)"
+  } else {
+    # gr = intGridAge
+    grName = "intGridAge"
+    lab = "Nest age - centered (days)"
+  }
+  
+  intPlot(impDat,
+            # modnum=4, 
+            modnum=sec_top, 
+            # grid1=gr, 
+            grid1=get(grName), 
+            # vars=c("species", "obs_int"), 
+            vars=c(intVar1.2, intVar2.2), 
+            x_lab=lab,
+          y_lab = yl)
+}
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

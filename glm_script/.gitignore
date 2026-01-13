@@ -57,12 +57,18 @@ py_output/
 # data
 nest_data/
 model_data/
+cleaned_data/
 *.csv
 
 # images
 *.png
 *.jpg
 
-#other
+# other
 ~$*
+*.html
+*.txt
+
+# scripts
+old_code.Rmd
 

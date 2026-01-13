@@ -1,0 +1,186 @@
+---
+title: "compare"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+The old one didn't have the same columns; need to add some...
+
+- add field_fate and change final_fate
+
+Maybe better comparison after removing the unknown fate nests
+
+
+Maybe go back and check the nest ages that I added and see if any are spurious
+
+### import the old data
+
+```{r echo=TRUE}
+# fn2 <- paste0(homeDir,"nest_data/nest_data_cleaned_0605_1753_.csv")
+# fn2 <- paste0(homeDir,"nest_data/nest_data_cleaned_0227_1740_.csv")
+fn2 <- paste0(homeDir,"nest_data/grouped_0805_1225_ed_20250813_0132.csv")
+# fn2 <- paste0(homeDir,"nest_data/nestdata_clean_1018_1506_.csv") # this one doesn't have camera variable!
+nData2 <- read_csv(fn2)[-c(1)]
+# nData2 <- read_csv(fn2)
+
+if(old_data){
+  cat("using old data")
+  nData2$fdate <- nData2$k
+  ff(nData2) # add a field fate column
+} else {
+  nData2$fdate <- nData2$final_obs_date
+  nData2$final_fate <- nData2$final_fate2
+  # nData$field_fate <- nData$field_fate2
+  nData2$field_fate <- nData2$field_fate3
+  if(feb==TRUE){
+    cat("using february data")
+    nData2$obs_int <- nData2$final_obs_int_feb
+    nData2$nest_age <- nData2$nest_age_feb
+    nData2$cam_fate   <- nData2$cam_fate_feb
+  } else  {
+    cat("using regular data")
+    # nData$obs_int <- nData$final_obs_int
+    nData2$obs_int <- nData2$final_obs_int2
+    nData2$nest_age <- nData2$nest_age1 # nest age based on actual obs date
+    # nData$nest_age <- nData$nest_age2 # nest age based on hatch date
+    nData2$cam_fate   <- nData2$cam_fate2
+  }
+}
+# if(feb==TRUE){
+#   nData2$final_obs_date <- nData2$k
+#   nData2$fdate          <- nData2$k
+# }
+names(nData2)
+```
+
+### Add a "field_fate" column, make U-H into H the way it used to be. Also, filter the data and add the predictors.
+
+filter_dat assumes ungrouped data by default.
+
+```{r echo=TRUE}
+if(old_data){
+nd_2 <- nData2 %>%
+    mutate(field_fate = final_fate) %>%
+    mutate(final_fate = coalesce(cam_fate, field_fate )) %>%
+    filter(nest!=20365) %>%
+    filter_dat(sites = sites_sel, spp = spp_sel, cam_vect = cam_str, debug = TRUE) %>%
+    mutate(fate=ifelse(field_fate=="U-H", 1, fate))
+  table(nd_2$fate)
+  # ndGLM_test <- as.data.frame(add_vars(nd_2, UHisH=UHisH, UFisF=UFisF, debug=T))
+  ndGLM_test <- as.data.frame(add_vars(nd_2,  debug=T))
+  ndGLM_test <- ndGLM_test %>% select(nest, status, species, field_fate, cam_fate, final_fate, fate_date, fdate, nest_age, obs_int, how_mis, HF_mis, misclass, is_u, hatchfail, c_hatchfail, fate, cfate)
+}else{
+  nd_2 <- nData2 %>%
+    filter(nest!=20365) %>%
+    filter_dat1(sites = sites_sel, spp = spp_sel, cam_vect = cam_str, grouped=TRUE, debug = TRUE)
+  
+  ndGLM_test<- as.data.frame(add_vars(nd_2, debug=T)) 
+  ndGLM_test <- ndGLM_test %>% select(nest,species, field_fate, cam_fate, final_fate, fdate, nest_age, obs_int, how_mis, HF_mis, misclass, is_u, hatchfail, c_hatchfail, fate, cfate)
+}
+```
+
+### Remove rows missing camera fate; visualize the data before and after.
+
+```{r echo=TRUE}
+
+# ```{r echo=TRUE}
+# 
+cat("BEFORE REMOVING CAM FATE NA:\n\n")
+print_vars(ndGLM_test)
+ndGLM_red2 <- ndGLM_test[!is.na(ndGLM_test$cam_fate),]
+ndGLM_red2 <- ndGLM_red2[ndGLM_red2$cam_fate!="U",]
+ndGLM_red2$nest[is.na(ndGLM_red2$misclass)] 
+cat("AFTER REMOVING CAM FATE NA:\n\n")
+ndGLM_miss2 <- dat_miss(ndGLM_red2)
+print_vars(ndGLM_red2)
+
+
+ndGLM_red2_2 <- ndGLM_red2 %>%
+  set_var_types() %>%
+  # refactor(num_fate=4) %>%
+  # refactor(num_fate=6) %>%
+  mutate(mclass = misclass == 1,
+         isu    = is_u == 1) %>%
+  mutate(across(c(isu, mclass), as.factor))
+
+print_vars(ndGLM_red2_2)
+```
+
+### Reduce the number of fate categories by combining human- and cattle-related failure.
+
+```{r echo=TRUE}
+
+nfate=6
+ndGLM_2 <- ndGLM_red2_2 %>%
+  refactor(num_fate=nfate) 
+# levels(ndGLM6$cam_fate)
+
+ndGLM_2_cc <- ndGLM_2 %>% # I don't know why this isn't working
+  remove_na(allNA = ndGLM_miss2) %>%
+  mutate(obs_int = ifelse(nest==20256,6,obs_int))
+```
+
+### Compare before removing all NAs (just cam fate NA removed):
+
+Moved this earlier so cam_fate shows up as strings, not numbers (after you make it into a factor)
+
+```{r echo=TRUE}
+# summary(arsenal::comparedf(ndGLM_, ndGLM_2))
+# dfDiffSum <- summary(arsenal::comparedf(ndGLM_, ndGLM_2, by="nest"))
+# 
+# nData = ndGLM_red
+# nData2 = ndGLM_red2
+datNames <- c("ndGLM_red", "ndGLM_red2")
+d1 <- get(datNames[1])
+d2 <- get(datNames[2])
+byVar <- "nest"
+
+# dfDiffSum <- summary(arsenal::comparedf(ndGLM_red, ndGLM_red2, by="nest"))
+dfDiffSum <- summary(arsenal::comparedf(d1, d2, by=byVar))
+dfDiffSum
+print(dfDiffSum$obs.table)
+# write.csv(dfDiffSum$obs.table, "output/df-diff-obs.csv")
+now = format(Sys.time(), "_%m%d_%H%M_")
+write.csv(dfDiffSum$obs.table, paste0(
+  "output/diff-obs_",datNames[1],"_",datNames[2],"_by",byVar,"_", now, ".csv"
+  ))
+dfDiffs   <- arsenal::diffs(dfDiffSum)
+# dfDiffs
+write.csv(dfDiffs, paste0(
+  "output/df-diff_",datNames[1],"_",datNames[2],"_by", byVar,"_", now, ".csv"
+  ))
+
+diffVars  <- dfDiffSum$vars.ns.table %>%
+  unnest(cols=class)
+write.csv(diffVars, paste0(
+  "output/diff-vars_",datNames[1],"_",datNames[2],"_by", byVar, now, ".csv"
+  ))
+```
+
+
+```{r echo=TRUE}
+datNames <- c("ndGLM_cc", "ndGLM_feb_cc")
+d1 <- get(datNames[1])
+d2 <- get(datNames[2])
+byVar <- "nest"
+# dfDiffSummCC <- summary(arsenal::comparedf(ndGLM_cc, ndGLM_feb_cc, by="nest"))
+dfDiffSummCC <- summary(arsenal::comparedf(d1, d2, by="nest"))
+# write.csv(dfDiffSummCC$obs.table, "df-diff-obs-cc.csv")
+write.csv(dfDiffSummCC$obs.table, paste0(
+  "output/diff-obs-cc_",datNames[1],"_",datNames[2],"_by",byVar,"_", now, ".csv"
+  ))
+
+dfDiffsCC   <- arsenal::diffs(dfDiffSummCC)
+# dfDiffs
+# write.csv(dfDiffsCC, "output/df_differences_cc.csv")
+write.csv(dfDiffsCC$obs.table, paste0(
+  "output/df-diff-cc_",datNames[1],"_",datNames[2],"_by",byVar,"_", now, ".csv"
+  ))
+
+diffVarsCC  <- dfDiffSummCC$vars.ns.table %>%
+  unnest(cols=class)
+write.csv(diffVarsCC, paste0(
+  "output/diff-vars-cc_",datNames[1],"_",datNames[2],"_by", byVar, now, ".csv"
+  ))
+```

@@ -1,0 +1,415 @@
+---
+title: "other_plots_tables"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+# get nest numbers from the current data:
+nestnums <- nData %>% select(nest) %>% unlist
+nests <- data.frame(nest=nData$nest)
+
+# and whatever column from the old data:
+filename <- paste0(homeDir, "nest_data/nest_data_cleaned_0227_1740_.csv")
+nData_feb <- read_csv(filename)
+nData_feb <- ff(nData_feb) %>% # add field_fate column
+  group_by(nest) %>%
+  summarize(field_fate = last(field_fate))
+nData_feb <- nData_feb %>% filter(nest %in% nestnums)
+nData_feb_2 <- merge(x=nests, y=nData_feb, by="nest", all=TRUE)
+write.csv(nData_feb_2, "nests_feb_field_fate.csv")
+```
+
+#### add field fate function
+```{r include=FALSE}
+ff <- function(nData){
+    cat("*** adding field fate category ***\n")
+  cat("old final_fate category:\n")
+  print(table(nData$final_fate))
+  nData <- nData %>%
+    mutate(field_fate = final_fate) %>%
+    mutate(final_fate = coalesce(cam_fate, field_fate )) 
+  cat("new final_fate category:\n")
+  print(table(nData$final_fate))
+  cat("new field_fate category:\n")
+  print(table(nData$field_fate))
+  
+  nData$fdate <- nData$k
+  return(nData)
+}
+```
+
+Estimate bias for hatch date:
+
+```{r eval=FALSE, include=FALSE}
+est_hatch <- ndGLM_$estHD[ndGLM_$cam_fate=="H"]
+names(est_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+
+true_hatch <- ndGLM_$k_adj[ndGLM_$cam_fate=="H"]
+names(true_hatch) <- as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+plot(x=est_hatch, y=true_hatch)
+# mtr <- caret::confusionMatrix(est_hatch, true_hatch)
+# as.character(ndGLM_$nest[ndGLM_$cam_fate=="H"])
+# 
+# est_hatch <- ndGLM_ %>%
+#   filter(!is.na())
+```
+
+### More tables:
+
+```{r eval=FALSE, include=FALSE}
+# fail <- c("S","F","Hu","D","A")
+fail <- c(0,2:6)
+corr_fate <- ndGLM_ %>% 
+  # filter(HF_mis==1) %>%
+  filter(misclass==1) %>%
+  mutate(
+    correction = case_when(
+      fate == 7 & cfate %in% fail ~ "U to F",
+      fate == 7 & cfate == 1 ~ "U to H",
+      fate == 1 & cfate %in% fail ~ "H to F",
+      fate %in% fail & cfate == 1 ~ "F to H",
+      fate %in% fail & fate != cfate ~ "cause of fail"
+    )) %>% select(nest, species, field_fate, cam_fate, correction)
+
+cat("nests marked unknown that actually failed:\n", 
+    corr_fate$nest[corr_fate$correction=="U to F"])
+cat("\n\nnests marked unknown that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="U to H"])
+cat("\n\nnests marked failed that actually hatched:\n",
+    corr_fate$nest[corr_fate$correction=="F to H"])
+cat("\n\nnests marked hatched that actually failed:\n",
+    corr_fate$nest[corr_fate$correction=="H to F"])
+    # correction = case_when(
+    #   field_fate == "U" & cam_fate == "H" ~ "U to H",
+    #   field_fate == "U" & cam_fate %in% fail  ~ "U to F",
+    #   field_fate %in% fail & cam_fate == "H" ~ "F to H",
+    #   field_fate == "H" & cam_fate %in% fail ~ "H to F"
+    # )
+  # )
+  
+```
+
+### a. Look at/edit individual nests or groups of nests (OPTIONAL)
+
+```{r examine-full-data, eval=FALSE, include=FALSE}
+nestNum <- 30959
+as.vector(ndGLM1[ndGLM1$nest==nestNum,])
+
+ndGLM1$nest_age[ndGLM1$nest==30959] = 20
+
+ndGLM1$fate_date[ndGLM1$nest %in% justFDate]
+# ndGLM1[2,]
+```
+
+### f. Compare dataframes  *optional* :
+
+```{r, child=if(compare) 'compare.Rmd'}
+
+```
+
+I made this one a function in the nestGLM package:
+
+```{r}
+datName <- "ndGLM1" # complete data, no rows removed yet
+  ndDiag <- get(datName)
+  expl = prVars
+  dep = "is_u"
+  # creeate an index of variables with at least one NA:
+  exp_index <- lapply(expl, function(x) sum(is.na(ndDiag[x]))) > 0
+  exp_miss <- expl[exp_index] 
+  exp_miss
+  # ndDiag <- datDiag %>%
+  #   dplyr::mutate(missAge = is.na(nest_age), # is this part necessary?
+  #          missFate = is.na(cam_fate),
+  #          missInt = is.na(obs_int),
+  #          missDate = is.na(fdate))
+  # dep <- "is_u"
+  # expl <- c("nest_age", "cam_fate", "species", "obs_int", "fdate")
+
+  # missPl <- ndDiag %>% finalfit::missing_pairs(dependent=dep, explanatory=expl)
+  # ggsave("missing_data.png", plot=missPl)
+  tabNames <- list()
+  for(v in seq_along(exp_miss)){
+    # v=1
+    # expl[v]
+    # expl[-v]
+    missTab <- ndDiag %>%
+      dplyr::mutate(across(c(species, cam_fate), as.factor)) %>%
+      finalfit::missing_compare(dependent = expl[v], # this should be the table
+      # finalfit::missing_pairs(dependent = expl[v],  # this is the plot
+                                # explanatory = expl[expl!=v])
+                                explanatory = expl[-v])
+    print(missTab)
+    titl <- names(missTab)[1]
+    names(missTab) <- c("var", "val", "not_missing", "missing", "p")
+    missTabFancy <- missTab %>%
+      gt::gt(rowname_col = "var") %>%
+      gt::tab_header(title=titl) %>%
+      gt::cols_label(val ~ "",
+                 not_missing ~ "Not missing (percent)",
+                 missing ~ "Missing (percent)",
+                 p ~ "p-value") %>%
+      nestGLM::save_tab(suffix=paste(dName,dep,expl[v],sep="_"), rtf=TRUE)
+    tabNames[v] <- missTab
+  }
+```
+
+These are in a child doc now:
+
+```{r}
+
+impRes <- imppDat %>%
+  select(nest, nest_age, obs_int, cam_fate, fdate, species, HF_mis, misclass, is_u) %>%
+  # runImpMods(.,modList=modList,resp="is_u")
+  runImpMods(.,modList=modList,regMethod = "brglm2",resp=resp1)
+# summary(impRes)
+# impRes
+# lapply(impRes, summary)
+  fname <- paste0(datName,"impAIC_q1_",uVar,fVar)
+aicImp <- aicImpMods(impModPool = impRes,modList = modList,filePrefix = fname)
+# only output is the filename - can't see the R object
+# now the function also saves an RDS of the imputation AIC info.
+aicImpDat <- readRDS("aicImpMod.rds")
+# aic <- as.data.frame(aicImpDat)
+# aic <- purrr::map_df(aicImpDat, tibble::as_tibble) # deprecated function
+aic <- aicImpDat %>% 
+  purrr::map(as_tibble) %>% 
+  reduce(bind_rows) %>%
+  mutate(name = modNames, num = c(1:8)) %>%
+  sort_by(~ list(glanced.AIC)) # not sure why the syntax is like this, see documentation
+top_num <- aic$num[1]
+# aic$name = modNames
+# 
+# impTab <- impModTab(impModPool = impRes,modList = modList)
+# aicImp
+# knitr::include_graphics(paste0("analysis/",fname), 
+knitr::include_graphics(aicImp, 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+```{r}
+
+# this works:
+impDat1 <- get(datNameImp)
+impDat  <- mice::mice(impDat1, seed=613, m=100, printFlag=FALSE)
+# fit <- with(impDat, glm(as.formula(paste(resp1, modList[[5]])), family=binomial, method=brglm2::brglmFit)) 
+# use the number of the top model to evaluate it:
+fit <- with(impDat, glm(as.formula(paste(resp1, modList[[top_num]])), family=binomial, method=brglm2::brglmFit)) 
+# pass results to tbl_regression before pooling, and it will handle pooling + tidying:
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+varNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vnames = as.list(varNames)    
+names(vnames) <- vars
+# tabOR <- gtsummary::tbl_regression(pool.fit, label=vnames, exponentiate=TRUE)
+summ.fit <- gtsummary::tbl_regression(fit, label=vnames, exponentiate=TRUE)
+summ.fit
+fn <- sprintf("_q1_reg_imp_%s_%s.rtf", datNameImp, now)
+summ.fit %>%
+  gtsummary::as_gt() %>%
+  gt::gtsave( filename=fn, path="analysis/" )
+
+```
+
+
+```{r q2-impute, echo=TRUE}
+# impDat <- ndGLM_imp   
+fam <- binomial
+# met <- "brglmFit"
+# resp <- "HF_mis"
+# resp <- "misclass"
+
+cat("imputation using this data:", datNameImp)
+
+impRes <- imppDat %>%
+  select(nest, nest_age, obs_int, cam_fate, fdate, species, HF_mis, misclass, is_u) %>%
+  runImpMods(.,modList=modList,regMethod = "brglm2",resp=resp2)
+  # runImpMods(.,modList=modList,regMethod = "glm.fit",resp=resp2)
+# impRes
+# lapply(impRes, summary)
+
+fname <- paste0(datName,"impAIC_q2_",uVar,fVar)
+# aicImp <- aicImpMods(impRes, fname)
+aicImp <- aicImpMods(impModPool = impRes,modList = modList,filePrefix = fname)
+# aicImp <- aicImpMods(impRes, "impAIC_q2_")
+# aicImp
+knitr::include_graphics(aicImp, 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+
+```{r q2-impute-2, echo=TRUE}
+# summary(pool(fit)) doesn't give the results the website claims it does, but only when you call model fit from a list?
+# this works:
+impDat1 <- get(datNameImp)
+impDat  <- mice::mice(impDat1, seed=613, m=100, printFlag=FALSE)
+fit <- with(impDat, glm(as.formula(paste(resp2, modList[[5]])), family=binomial, method=brglm2::brglmFit)) 
+# pass results to tbl_regression before pooling, and it will handle pooling + tidying:
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+varNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vnames = as.list(varNames)    
+names(vnames) <- vars
+# tabOR <- gtsummary::tbl_regression(pool.fit, label=vnames, exponentiate=TRUE)
+summ.fit <- gtsummary::tbl_regression(fit, label=vnames, exponentiate=TRUE)
+summ.fit
+fn <- sprintf("_q2_reg_imp_%s_%s.rtf", datNameImp, now)
+summ.fit %>%
+  gtsummary::as_gt() %>%
+  gt::gtsave( filename=fn, path="analysis/" )
+```
+
+
+```{r q2-impute-3, eval=FALSE, include=FALSE}
+# you can still also look at pooled results:
+pool.fit <- mice::pool(fit)
+summary(pool.fit)
+
+# these don't:
+mod_num <- 5
+fit <- mods[[5]]
+summary(fit)
+fit_imp <- impRes[[mod_num]]$pooled
+fit_imp
+summary(fit_imp)
+reg_sum <- summary(impRes[[5]]$pooled)
+reg_sum[,2]
+
+pool.OR <- exp(cbind(reg_sum[,1]))
+# impRes[[5]]$pooled %>%
+#   select(term, estimate, )
+
+```
+
+```{r}
+if(old_data){
+  filename <- paste0(homeDir,"nest_data/nest_data_cleaned_0227_1740_.csv")
+  addFieldFate = TRUE
+  grouped      = FALSE
+  compare      = FALSE
+} else {
+  filename <- paste0(homeDir,read_file(paste0(homeDir, "cleaned_data/import_name.txt")))
+}
+```
+
+
+#### Create and save the AIC table
+
+```{r q2-aic, echo=FALSE}
+# fname <- mods %>% bic_mod() %>% save_tab()
+# suffix = paste0("_unscl_cc_q2_", nfate, "_fates")
+# suffix = paste0("-",datName,"-q2-", nfate, "fates")
+suffix = paste0("-",datName,"-q2-", uVar,fVar)
+# suffix = "_scl_cc_q1"
+
+aicTab <- unname(mods) %>% aic_mod()
+fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
+cat("creating AIC table; filename =",fname)
+
+knitr::include_graphics(paste0("analysis/",fname),
+                        dpi=(1300/6)) # dpi setting = only thing that works
+
+```
+
+#### Create and save the regression table for the best model
+
+```{r q2-regtab, echo=TRUE}
+# first, find the number of the best model
+# modnum = 13# manually enter number for top model
+# get all the model names:
+modNames <- as.list(modnames(mods)) # list of models in the order they were specified
+# c <- confset(cand.set=mods, modnames=modNames, method='raw')
+# 
+# while(aWeight < 0.95){
+#   
+#
+topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
+cat("top model:", topMod)
+secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
+cat("second best model:", secTopMod)
+cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
+modnum = which(modNames == topMod)
+modnum2 = which(modNames == secTopMod)
+cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula) )
+
+regrTab <- tabRegr(modNum=modnum,
+                   mods=mods,
+                   resp=resp,
+                   debug=T,
+                   # suffix =paste0("q2_",nfate,"fates"))
+                   suffix =paste0(datName,"q2_",uVar,fVar))
+knitr::include_graphics(paste0("analysis/",regrTab), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+# confSet <- length(which(cumsum(aicTab$`_data`$weight)<0.95))
+# confSet <- which(cumsum(aicTab$`_data`$weight)<0.95) # this doesn't get the last one unless it sums to exactly 0.95
+```
+
+
+```{r q2-regtab2, eval=FALSE, include=FALSE}
+newNames=c('SPECIES', 'NEST_AGE', 'FINAL_INTERVAL', 'TRUE_FATE', 'END_DATE')
+vars=c('species', 'nest_age', 'obs_int', 'cam_fate', 'fdate')
+vnames <- as.list(newNames)
+names(vnames) <- vars
+  
+                    
+tabOR <- gtsummary::tbl_regression(mods[[modnum]],
+                          label = vnames,
+                          # label= list(
+                          #   # resp~paste(r), # can't label response var
+                          #             species~"SPECIES",
+                          #             nest_age~"NEST_AGE",
+                          #             obs_int~"FINAL_INTERVAL",
+                          #             cam_fate~"TRUE_FATE",
+                          #             fdate~"END_DATE"),
+                          exponentiate=T)
+
+```
+```{r}
+# modNames <- as.list(modnames(mods)) # list of models in the order they were specified
+# aic <- aicImpDat %>% 
+#   purrr::map(as_tibble) %>% 
+#   reduce(bind_rows) %>%
+#   mutate(name = modNames, num = c(1:8)) %>%
+#   sort_by(~ list(glanced.AIC)) # not sure why the syntax is like this, see documentation
+# aic
+# aic$name = modNames
+# dp <- function(x) deparse(x, width.cutoff=150)
+  
+# modEQ <- paste(sapply(modList))
+# modEQ <- gsub()
+# modSubs <- c("species" = "SPECIES", "")
+# modEQ
+# aicTabImp <- readRDS("impAICtab.rds")
+# aicTabImp
+# aicTabImp$modname <- unlist(modNames) # NOT SORTED
+# aicTabImp2 <- gt::gt(aicTabImp, rownames_to_stub = TRUE) %>%
+#   
+#     cols_label(
+#       modname = "Model",
+#       dfResid = "Degrees of\nFreedom",
+#       aic     = "AICc",
+#       deltaAIC = "delta AIC",
+#       akaikeWt = "Akaike Weight",
+#       logLik   = "Log\nLikelihood",
+#       rdev     = "Residual\nDeviance"
+#     )  %>% 
+#   gt::gtsave(filename="")
+  
+top_num <- aicTabImp$num[1]
+sec_top <- aicTabImp$num[2]
+# 
+cat("top model:", modList[top_num])
+# secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
+cat("\nsecond best model:", modList[sec_top])
+cat("\ndelta AIC of second best model:", aicTabImp$deltaAIC[2])
+# modnum = which(modNames == topMod)
+# modnum2 = which(modNames == secTopMod)
+# aicImp
+
+# knitr::include_graphics(paste0("analysis/",aicImp),
+# # knitr::include_graphics(aicImp, 
+#                         dpi=(1300/6)) # dpi setting = only thing that works
+```

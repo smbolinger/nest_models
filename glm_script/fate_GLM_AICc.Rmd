@@ -1,0 +1,96 @@
+---
+title: "fateGLM_aic"
+author: "Sarah Bolinger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+#### Create and save the AIC table
+
+```{r q1-aic, echo=FALSE}
+# fname <- mods %>% bic_mod() %>% save_tab()
+# suffix = "_unscl_cc_q1"
+# suffix = paste0("_unscl_cc_q1_",nfate,"fates")
+# suffix = paste0("-",datName,"-q1-",uVar,fVar)
+suffix = paste0("-",datName,quest,uVar,fVar)
+# suffix = "_scl_cc_q1"
+aicTab <- unname(mods) %>% aic_mod()
+fname <- aicTab %>% save_tab(suffix=suffix, rtf=TRUE)
+cat("creating AIC table; filename =",fname)
+
+knitr::include_graphics(paste0("analysis/",fname), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+# MuMIn::model.sel(mods)
+# modified_mods <- lapply(mods, MASS::glm.convert)
+# AICcmodavg::aictab(cand.set=modified_mods)
+```
+
+#### Create and save the regression table for the best model
+
+```{r q1-regtab, echo=FALSE}
+# first, find the number of the best model
+# modnum = 13# manually enter number for top model
+# get all the model names:
+modNames <- as.list(modnames(mods)) # list of models in the order they were specified
+topMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[1]
+cat("top model:", topMod)
+secTopMod = aicTab$`_data`$`__GT_ROWNAME_PRIVATE__`[2]
+cat("second best model:", secTopMod)
+cat("delta AIC of second best model:", aicTab$`_data`$dAICc[2])
+modnum = which(modNames == topMod)
+modnum2 = which(modNames == secTopMod)
+cat("creating regression table for top model, model number", modnum, "; model formula:", paste(mods[[modnum]]$formula))
+regrTab <- tabRegr(modNum=modnum, 
+                   mods=mods, 
+                   resp=resp,
+                   debug=T,
+                   suffix=paste0(datName,"q1_",uVar,fVar))
+knitr::include_graphics(paste0("analysis/",regrTab), 
+                        dpi=(1300/6)) # dpi setting = only thing that works
+```
+
+#### Plot the top model:
+
+```{r q1-plot, eval=FALSE, include=FALSE}
+intPlot <- sjPlot::plot_model(
+  mods[[modnum]], 
+  type="int",
+  title="Predicted probabilities of marking nest fate \"unknown\" in the field",
+  axis.title=c("FINAL_OBS_INTERVAL","MARKED_UNKNOWN"),
+  legend.title="TRUE_FATE"
+  
+  ) + scale_color_manual(
+    values=c("H"="skyblue2", "D"="green3", "A"="red3", "F"="purple2"),
+    labels=c("H"="Hatched", "D"="Depredated", "A"="Abandoned", "F"="Failed (other)")
+  )
+intPlot
+# plogis(predict(fitted_model)) should convert the log-odds output of the model
+# to a probability; use predict(fitted_model, type="response") to see prob
+# of your data values.. can also calculate probs by hand if you want
+
+dataMod$probfull <- plogis(predict(mods[[1]]))
+dataMod$prob5 <- plogis(predict(mods[[5]]))  
+
+y = "probfull"
+x1 = "nest_age"
+x2 = "species"
+
+ggplot(dataMod, aes(x=.data[[x1]], y=.data[[y]])) +
+  geom_point(aes(color=.data[[x2]])) + 
+  geom_abline()
+```
+
+#### Odds ratios
+
+```{r q1-OR, eval=FALSE, include=FALSE}
+# knitr::include_graphics(filename2,
+#                         dpi=(1300/6)) # dpi setting = only thing that works
+oddrat <- mods |> 
+  discard(is.null) |>
+  odd_rat()
+oddrat
+```
+
+When we don't impute the NAs, it's a complete cases analysis (all NA
+rows removed automatically) BUT I need to be the one to remove the rows,
+or I'll be comparing models with different sample sizes
